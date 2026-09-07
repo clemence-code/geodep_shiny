@@ -11,6 +11,7 @@ library(leaflet)
 library(htmltools)
 library(DT)
 library(sf)
+library(readr)
 
 here::i_am('geodep_shiny.Rproj')
 
@@ -692,7 +693,7 @@ server <- function(input, output, session) {
       }
     },
     content = function(file) {
-      write.csv(filtered_dependency_data(), file, row.names = FALSE)
+      write_excel_csv2(filtered_dependency_data(), file)
     }
   )
 }
