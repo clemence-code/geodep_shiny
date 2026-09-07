@@ -1,0 +1,700 @@
+## =============================================================================
+## GEODEP - SHINY APP
+## =============================================================================
+
+library(here)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(shiny)
+library(leaflet)
+library(htmltools)
+library(DT)
+library(sf)
+
+here::i_am('geodep_shiny.Rproj')
+
+## -----------------------------------------------------------------------
+## 0. Load precomputed inputs
+## -----------------------------------------------------------------------
+geodep_inputs <- readRDS("1_Data/geodep_shiny_inputs.rds")
+
+DEP_YEAR                  <- geodep_inputs$DEP_YEAR
+eu_countries               <- geodep_inputs$eu_countries
+sector_names                <- geodep_inputs$sector_names
+sector_choices                <- geodep_inputs$sector_choices
+world_polygons                  <- geodep_inputs$world_polygons
+iso_name_lookup                   <- geodep_inputs$iso_name_lookup
+country_choices                     <- geodep_inputs$country_choices
+country_choices_ui                    <- geodep_inputs$country_choices_ui
+dep_import_base                         <- geodep_inputs$dep_import_base
+dep_export_base                           <- geodep_inputs$dep_export_base
+traded_by_country                           <- geodep_inputs$traded_by_country
+traded_by_country_export                      <- geodep_inputs$traded_by_country_export
+imports_sector_long_all                         <- geodep_inputs$imports_sector_long_all
+
+rm(geodep_inputs); gc()
+
+## -----------------------------------------------------------------------
+## 1. Small helpers 
+## -----------------------------------------------------------------------
+to_eun <- function(iso3) {
+  if_else(iso3 %in% eu_countries, "EUN", iso3)
+}
+
+iso_display_name <- function(iso3) {
+  case_match(
+    iso3,
+    "EUN" ~ "European Union",
+    .default = iso3
+  )
+}
+
+iso_name <- function(iso3) {
+  matched <- iso_name_lookup$name[match(iso3, iso_name_lookup$iso_a3)]
+  ifelse(is.na(matched), iso3, matched)
+}
+
+## -----------------------------------------------------------------------
+## 2. UI
+## -----------------------------------------------------------------------
+ui <- fluidPage(
+  tags$head(
+    tags$style(HTML("
+      body {
+        background-color: #eef3f1;
+        font-family: 'Helvetica Neue', Arial, sans-serif;
+        color: #2b2b2b;
+        padding-bottom: 40px;
+      }
+
+      .container-fluid {
+        max-width: 1400px;
+        padding-top: 10px;
+        padding-left: 30px;
+        padding-right: 30px;
+      }
+
+      .title-banner {
+        background-color: #1f6f5c;
+        color: #ffffff;
+        padding: 28px 34px;
+        margin: -10px -30px 30px -30px;
+        border-bottom: 4px solid #8b3a3a;
+      }
+      .title-banner h1 {
+        margin: 0;
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+      }
+
+      .intro-text {
+        background-color: #dce8e4;
+        border-left: 4px solid #1f6f5c;
+        padding: 18px 22px;
+        border-radius: 4px;
+        margin-bottom: 30px;
+        color: #2b2b2b;
+        line-height: 1.6;
+      }
+
+      .controls-row {
+        margin-bottom: 24px;
+      }
+
+      h3, h4 {
+        color: #1f6f5c;
+      }
+      h3 {
+        border-bottom: 2px solid #dce8e4;
+        padding-bottom: 10px;
+        margin-top: 40px;
+        margin-bottom: 20px;
+      }
+
+      label {
+        color: #1f6f5c;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .section-block {
+        margin-bottom: 36px;
+      }
+
+      .btn {
+        background-color: #1f6f5c;
+        color: #ffffff;
+        border: none;
+        border-radius: 3px;
+        font-weight: 600;
+      }
+      .btn:hover, .btn:focus {
+        background-color: #164f42;
+        color: #ffffff;
+      }
+      #reset_button {
+        background-color: #6c7a76;
+      }
+      #reset_button:hover {
+        background-color: #56635f;
+      }
+      #info_button {
+        background-color: #8b3a3a;
+      }
+      #info_button:hover {
+        background-color: #6e2c2c;
+      }
+      #download_table {
+        background-color: #8b3a3a;
+        margin-top: 10px;
+      }
+      #download_table:hover {
+        background-color: #6e2c2c;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+      .form-control, .selectize-input {
+        border: 1px solid #b7cdc6;
+        border-radius: 3px;
+        padding: 8px 10px;
+      }
+      .form-control:focus, .selectize-input.focus {
+        border-color: #1f6f5c;
+        box-shadow: 0 0 0 2px rgba(31, 111, 92, 0.2);
+      }
+      .radio-inline, .radio label {
+        color: #2b2b2b;
+        font-weight: normal;
+      }
+      .radio {
+        margin-bottom: 6px;
+      }
+
+      .well {
+        background-color: #f4f8f6;
+        border: 1px solid #cfe0da;
+        border-left: 5px solid #8b3a3a;
+        border-radius: 4px;
+        padding: 20px 24px;
+        margin-bottom: 20px;
+      }
+
+      #dependency_map {
+        border: 1px solid #b7cdc6;
+        border-radius: 4px;
+        margin-bottom: 30px;
+      }
+
+      hr {
+        border-top: 1px solid #cfe0da;
+        margin: 34px 0;
+      }
+
+      table.dataTable thead th {
+        background-color: #1f6f5c;
+        color: #ffffff;
+        padding: 10px 12px;
+      }
+      table.dataTable tbody td {
+        padding: 8px 12px;
+      }
+      .dataTables_wrapper {
+        margin-top: 10px;
+      }
+    "))
+  ),
+  
+  div(class = "title-banner",
+      h1("GeoDep \u2014 Trade Dependencies")
+  ),
+  
+  fluidRow(
+    column(12,
+           div(class = "intro-text",
+               p("Click a country on the map to select it as the Importer (Destination); click a second country to select it as the Exporter (Origin). You can also search by name below. Click a third time on the map, or use Reset, to start over. EU-27 member states are treated as a single entity (EUN).")
+           ),
+           fluidRow(class = "controls-row",
+                    column(4, radioButtons("dep_direction", "Show dependencies for:",
+                                           choices = c("Imports" = "import",
+                                                       "Exports" = "export"),
+                                           selected = "import"))
+           ),
+           fluidRow(class = "controls-row",
+                    column(4, selectInput("sector_filter", "Strategic sector:",
+                                          choices = sector_choices, selected = "all")),
+                    column(4, radioButtons("map_metric", "Map shows:",
+                                           choices = c("Share of products" = "count",
+                                                       "Share of trade value" = "value"),
+                                           selected = "count")),
+                    column(4,
+                           tags$div(style = "margin-top: 25px;",
+                                    actionButton("swap_button", "\u21c4 Swap", style = "margin-right: 8px;"),
+                                    actionButton("reset_button", "Reset selection", style = "margin-right: 8px;"),
+                                    actionButton("info_button", "\u2139 Methodology"))
+                    )
+           ),
+           fluidRow(class = "controls-row",
+                    column(6, selectizeInput("importer_select", "Importer (Destination):",
+                                             choices = country_choices_ui, selected = "",
+                                             options = list(placeholder = "Type a country name..."))),
+                    column(6, selectizeInput("exporter_select", "Exporter (Origin):",
+                                             choices = country_choices_ui, selected = "",
+                                             options = list(placeholder = "Type a country name...")))
+           ),
+           leafletOutput("dependency_map", height = "500px")
+    )
+  ),
+  
+  fluidRow(class = "section-block",
+           column(12,
+                  h3(textOutput("selection_status")),
+                  uiOutput("partners_panel"),
+                  hr(),
+                  downloadButton("download_table", "Download Table (CSV)"),
+                  br(), br(),
+                  DTOutput("dependency_table")
+           )
+  )
+)
+
+## -----------------------------------------------------------------------
+## 3. Server
+## -----------------------------------------------------------------------
+server <- function(input, output, session) {
+  selected_countries <- reactiveVal(character())
+  
+  observeEvent(input$info_button, {
+    showModal(modalDialog(
+      title = "Methodology",
+      size = "l",
+      p("This app is built on the GeoDep database (CEPII), using the methodology described in ",
+        tags$a(href = "https://www.cepii.fr/CEPII/fr/publications/pb/abstract.asp?NoDoc=14223",
+               target = "_blank",
+               "Lefebvre & Wibaux (2024), \u201cImport Dependencies: Where Does the EU Stand?\u201d, CEPII Policy Brief n\u00b02024-47"),
+        "."),
+      p("A product (HS 6-digit) is classified as ", tags$strong("import-dependent"),
+        " for a country only if it meets all four of the following criteria at once:"),
+      tags$ol(
+        tags$li(tags$strong("Import concentration : "),
+                " a Herfindahl-Hirschman Index (HHI) computed on the country's import shares by origin exceeds 0.4, meaning its supply of the product is concentrated among few trading partners."),
+        tags$li(tags$strong("World export concentration : "),
+                " an HHI computed on world export shares (by exporting country) for that product also exceeds 0.4, meaning few countries in the world are even capable of supplying it \u2014 so switching to an alternative supplier is hard, not just currently avoided."),
+        tags$li(tags$strong("Non-substitutability by domestic supply : "),
+                " the ratio of the country's imports to its own exports of the product is above 1. This assumes a country's exports of a good broadly proxy the domestic production that could, in principle, be redirected to satisfy domestic demand instead; if imports exceed exports, domestic capacity cannot realistically cover the shortfall."),
+        tags$li(tags$strong("Persistence : "),
+                " all three criteria above must hold in at least two of the last three years, so a one-off or temporary spike in concentration does not count as a structural dependency.")
+      ),
+      p("The same four criteria, applied symmetrically, define ", tags$strong("export-dependent"),
+        " products: import concentration and world import concentration replace the export-side equivalents, and the roles of imports and exports are reversed in the non-substitutability ratio. Use the \u201cShow dependencies for\u201d toggle above the map to switch between the two views."),
+      p("On the map, exposure is shown either as the share of traded HS6 products for which the country is dependent (\u201cShare of products\u201d), or as the share of its total trade value concentrated in those dependent products (\u201cShare of trade value\u201d)."),
+      p("When an Importer and an Exporter are both selected, the partner panels list their top-3 ",
+        tags$em("bilateral"), " dependency partners \u2014 an additional, stricter criterion applied on top of the four above: for the Importer, the exporters supplying more than 50% of a given dependent product's import value; for the Exporter, the destinations absorbing more than 50% of a given dependent product's export value."),
+      p("Sector groupings in this app (Critical Raw Materials, Dual Use, Health, Agrifood, Energy, Other) come from dedicated reference lists (UNCTAD, EU dual-use regulation, CEPII health nomenclature, FAO, World Bank) and are not identical to the broader set of \u201cstrategic sectors\u201d (based on the EU's strategic ecosystems) used in the CEPII policy brief."),
+      p("Figures reflect 2024 (the only year for which the dependency indicators are available in this dataset) and EU-27 member states are aggregated into a single entity (EUN)."),
+      easyClose = TRUE,
+      footer = modalButton("Close")
+    ))
+  })
+  
+  observeEvent(input$reset_button, {
+    selected_countries(character())
+  })
+  
+  observeEvent(input$sector_filter, {
+    selected_countries(character())
+  })
+  
+  observeEvent(input$dep_direction, {
+    selected_countries(character())
+  })
+  
+  observeEvent(selected_countries(), {
+    sel <- selected_countries()
+    imp <- if (length(sel) >= 1) sel[1] else ""
+    exp <- if (length(sel) >= 2) sel[2] else ""
+    updateSelectizeInput(session, "importer_select", selected = imp)
+    updateSelectizeInput(session, "exporter_select", selected = exp)
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$importer_select, {
+    cur <- selected_countries()
+    new_imp <- input$importer_select
+    new_sel <- c(new_imp, if (length(cur) >= 2) cur[2] else NA)
+    new_sel <- new_sel[!is.na(new_sel) & new_sel != ""]
+    if (!identical(new_sel, cur)) selected_countries(new_sel)
+  }, ignoreInit = TRUE)
+  
+  observeEvent(input$exporter_select, {
+    cur <- selected_countries()
+    imp <- if (length(cur) >= 1) cur[1] else NA
+    new_sel <- c(imp, input$exporter_select)
+    new_sel <- new_sel[!is.na(new_sel) & new_sel != ""]
+    if (!identical(new_sel, cur)) selected_countries(new_sel)
+  }, ignoreInit = TRUE)
+  
+  sector_map_data <- reactive({
+    direction <- input$dep_direction
+    
+    base <- if (direction == "import") {
+      traded_by_country |>
+        rename(iso_plot = iso_d, dep1 = dependant_M_MC_t, dep2 = c4_M_MC, val = import_dpt)
+    } else {
+      traded_by_country_export |>
+        rename(iso_plot = iso_o, dep1 = dependant_X_MC_t, dep2 = c4_X_MC, val = export_opt)
+    }
+    
+    if (input$sector_filter != "all") {
+      base <- base |> filter(.data[[input$sector_filter]] == 1)
+    }
+    
+    total_traded <- base |>
+      distinct(iso_plot, hs6, val) |>
+      group_by(iso_plot) |>
+      summarise(n_total = n(), total_value = sum(val, na.rm = TRUE), .groups = "drop")
+    
+    dependent <- base |>
+      filter(dep1 == 1, dep2 == 1) |>
+      distinct(iso_plot, hs6, val) |>
+      group_by(iso_plot) |>
+      summarise(n_dep = n(), dep_value = sum(val, na.rm = TRUE), .groups = "drop")
+    
+    total_traded |>
+      left_join(dependent, by = "iso_plot") |>
+      mutate(
+        n_dep       = replace_na(n_dep, 0),
+        dep_value   = replace_na(dep_value, 0),
+        count_share = 100 * n_dep / n_total,
+        value_share = 100 * dep_value / total_value
+      ) |>
+      select(iso_plot, count_share, value_share, n_dep, n_total, dep_value, total_value)
+  }) |> bindCache(input$sector_filter, input$dep_direction)
+  
+  hover_data <- reactive({
+    import_base <- dep_import_base
+    export_base <- dep_export_base
+    
+    if (input$sector_filter != "all") {
+      import_base <- import_base |> filter(.data[[input$sector_filter]] == 1)
+      export_base <- export_base |> filter(.data[[input$sector_filter]] == 1)
+    }
+    
+    import_top3 <- import_base |>
+      group_by(iso_d, hs6) |>
+      mutate(origin_share = imports / import_dpt) |>
+      ungroup() |>
+      filter(origin_share > 0.5) |>
+      group_by(iso_d, iso_o) |>
+      summarise(dep_count = n(), .groups = "drop") |>
+      arrange(iso_d, desc(dep_count)) |>
+      group_by(iso_d) |>
+      slice_head(n = 3) |>
+      mutate(part = paste0(iso_name(iso_o), " (", dep_count, ")")) |>
+      summarise(import_top3 = paste(part, collapse = "; "), .groups = "drop") |>
+      rename(iso_plot = iso_d)
+    
+    export_top3 <- export_base |>
+      group_by(iso_o, hs6) |>
+      mutate(dest_share = imports / export_opt) |>
+      ungroup() |>
+      filter(dest_share > 0.5) |>
+      group_by(iso_o, iso_d) |>
+      summarise(dep_count = n(), .groups = "drop") |>
+      arrange(iso_o, desc(dep_count)) |>
+      group_by(iso_o) |>
+      slice_head(n = 3) |>
+      mutate(part = paste0(iso_name(iso_d), " (", dep_count, ")")) |>
+      summarise(export_top3 = paste(part, collapse = "; "), .groups = "drop") |>
+      rename(iso_plot = iso_o)
+    
+    full_join(import_top3, export_top3, by = "iso_plot")
+  }) |> bindCache(input$sector_filter)
+  
+  sector_map_sf <- reactive({
+    counts <- sector_map_data()
+    
+    world_polygons |>
+      mutate(iso_plot = to_eun(iso_a3)) |>
+      mutate(feature_id = paste0(iso_a3, "___", row_number())) |>
+      left_join(counts, by = "iso_plot")
+  })
+  
+  output$dependency_map <- renderLeaflet({
+    leaflet() |>
+      addProviderTiles(providers$Esri.WorldGrayCanvas) |>
+      setView(lng = 20, lat = 20, zoom = 2)
+  })
+  
+  observe({
+    map_sf <- sector_map_sf()
+    metric <- input$map_metric
+    sel    <- selected_countries()
+    direction_label <- if (input$dep_direction == "import") "import" else "export"
+    
+    fill_values  <- if (metric == "count") map_sf$count_share else map_sf$value_share
+    metric_label <- if (metric == "count") {
+      paste0("Share of products dependent (", direction_label, "s)")
+    } else {
+      paste0("Share of trade value dependent (", direction_label, "s)")
+    }
+    
+    pal <- colorNumeric(
+      palette  = "plasma",
+      domain   = fill_values,
+      reverse  = TRUE,
+      na.color = "lightgrey"
+    )
+    
+    show_hover <- length(sel) == 0
+    
+    label_arg <- NULL
+    if (show_hover) {
+      label_text <- with(map_sf, {
+        header <- if_else(iso_plot == "EUN", "European Union (EU-27)", name)
+        detail <- if (metric == "count") {
+          paste0(
+            ifelse(is.na(count_share), "0%", paste0(round(count_share, 1), "%")),
+            " (", ifelse(is.na(n_dep), 0, n_dep), " of ", ifelse(is.na(n_total), 0, n_total), " products)"
+          )
+        } else {
+          paste0(ifelse(is.na(value_share), "0%", paste0(round(value_share, 1), "%")), " of trade value")
+        }
+        paste0("<strong>", header, "</strong><br/>", metric_label, ": ", detail)
+      })
+      label_arg <- lapply(label_text, HTML)
+    }
+    
+    proxy <- leafletProxy("dependency_map", data = map_sf) |>
+      clearShapes() |>
+      clearControls() |>
+      addPolygons(
+        fillColor   = ~pal(fill_values),
+        weight      = 1,
+        color       = "white",
+        fillOpacity = 0.7,
+        highlightOptions = highlightOptions(
+          weight      = 2,
+          color       = "#666",
+          fillOpacity = 0.9,
+          bringToFront = TRUE
+        ),
+        layerId      = ~feature_id,
+        label        = label_arg,
+        labelOptions = labelOptions(
+          style     = list("font-size" = "12px", "max-width" = "260px", "white-space" = "normal"),
+          textsize  = "12px",
+          direction = "auto"
+        )
+      ) |>
+      addLegend(
+        position  = "bottomright",
+        pal       = pal,
+        values    = fill_values,
+        title     = paste0(metric_label, "\n(%)"),
+        labFormat = labelFormat(suffix = "%"),
+        na.label  = "0%"
+      )
+    
+    if (length(sel) >= 1) {
+      imp_sf <- map_sf |> filter(iso_plot == sel[1])
+      if (nrow(imp_sf) > 0) {
+        proxy <- proxy |> addPolygons(
+          data = imp_sf, fill = FALSE, color = "#1f78b4", weight = 4,
+          opacity = 1, layerId = paste0("highlight_importer_", imp_sf$feature_id)
+        )
+      }
+    }
+    if (length(sel) >= 2) {
+      exp_sf <- map_sf |> filter(iso_plot == sel[2])
+      if (nrow(exp_sf) > 0) {
+        proxy <- proxy |> addPolygons(
+          data = exp_sf, fill = FALSE, color = "#e31a1c", weight = 4,
+          opacity = 1, layerId = paste0("highlight_exporter_", exp_sf$feature_id)
+        )
+      }
+    }
+  })
+  
+  observeEvent(input$dependency_map_shape_click, {
+    click <- input$dependency_map_shape_click
+    raw_iso <- sub("___.*$", "", click$id)
+    clicked_iso <- to_eun(raw_iso)
+    current_selection <- selected_countries()
+    
+    if (length(current_selection) >= 2) {
+      selected_countries(clicked_iso)
+    } else if (clicked_iso %in% current_selection) {
+      return(NULL)
+    } else {
+      selected_countries(c(current_selection, clicked_iso))
+    }
+  })
+  
+  observeEvent(input$swap_button, {
+    current_selection <- selected_countries()
+    if (length(current_selection) == 2) {
+      selected_countries(rev(current_selection))
+    }
+  })
+  
+  output$selection_status <- renderText({
+    selection <- selected_countries()
+    sector_label <- names(sector_choices)[sector_choices == input$sector_filter]
+    
+    if (length(selection) == 0) {
+      return(paste("Status: No countries selected. Sector filter:", sector_label))
+    } else if (length(selection) == 1) {
+      return(paste("Status: Importer (Destination) selected as", iso_display_name(selection[1]), "- Please select Exporter."))
+    } else {
+      return(paste("Status: Showing", sector_label, "dependencies for Importer:",
+                   iso_display_name(selection[1]), "and Exporter:", iso_display_name(selection[2])))
+    }
+  })
+  
+  make_sector_chart <- function(iso) {
+    df <- imports_sector_long_all |>
+      filter(iso_d == iso) |>
+      group_by(Sector_Name) |>
+      summarise(n_dep = sum(dep_all, na.rm = TRUE), .groups = "drop")
+    
+    if (nrow(df) == 0) return(NULL)
+    
+    highlighted_sector <- if (input$sector_filter == "all") NA_character_ else sector_names[[input$sector_filter]]
+    
+    df <- df |> mutate(highlight = !is.na(highlighted_sector) & Sector_Name == highlighted_sector)
+    
+    ggplot(df, aes(x = reorder(Sector_Name, n_dep), y = n_dep, fill = highlight)) +
+      geom_col() +
+      coord_flip() +
+      scale_fill_manual(values = c(`TRUE` = "#e31a1c", `FALSE` = "#4a86c9"), guide = "none") +
+      labs(x = NULL, y = "Dependent products",
+           title = paste0("Import dependencies by sector - ", iso_display_name(iso), " (2024)")) +
+      theme_minimal(base_size = 11)
+  }
+  
+  output$partners_panel <- renderUI({
+    selection <- selected_countries()
+    if (length(selection) == 0) return(NULL)
+    
+    hover <- hover_data()
+    
+    make_card_ui <- function(idx) {
+      iso <- selection[idx]
+      row <- hover |> filter(iso_plot == iso)
+      import_txt <- if (nrow(row) == 0 || is.na(row$import_top3[1])) "None identified" else row$import_top3[1]
+      export_txt <- if (nrow(row) == 0 || is.na(row$export_top3[1])) "None identified" else row$export_top3[1]
+      
+      wellPanel(
+        h4(iso_display_name(iso)),
+        tags$p(tags$em("Depends on for imports (top 3 exporters to it):")),
+        tags$p(import_txt),
+        tags$p(tags$em("Depends on for exports (top 3 destinations):")),
+        tags$p(export_txt),
+        plotOutput(paste0("sector_chart_", idx), height = "220px")
+      )
+    }
+    
+    if (length(selection) == 1) {
+      fluidRow(column(6, make_card_ui(1)))
+    } else {
+      fluidRow(
+        column(6, make_card_ui(1)),
+        column(6, make_card_ui(2))
+      )
+    }
+  })
+  
+  observe({
+    selection <- selected_countries()
+    for (idx in seq_along(selection)) {
+      local({
+        i   <- idx
+        iso <- selection[i]
+        output[[paste0("sector_chart_", i)]] <- renderPlot({
+          make_sector_chart(iso)
+        })
+      })
+    }
+  })
+  
+  filtered_dependency_data <- reactive({
+    selection <- selected_countries()
+    req(length(selection) == 2)
+    
+    destination <- selection[1]
+    origin <- selection[2]
+    
+    result <- dep_import_base |>
+      filter(iso_d == destination, iso_o == origin) |>
+      group_by(hs6) |>
+      mutate(origin_share = imports / import_dpt) |>
+      ungroup() |>
+      filter(origin_share > 0.5)
+    
+    if (input$sector_filter != "all") {
+      result <- result |>
+        filter(.data[[input$sector_filter]] == 1)
+    }
+    
+    result |>
+      mutate(share_odpt = origin_share * 100) |>
+      select(
+        `HS6 Product` = hs6,
+        `Description` = Description,
+        `Total Imports (World, k$)` = import_dpt,
+        `Imports from Origin (k$)` = imports,
+        `Share from Origin (%)` = share_odpt,
+        starts_with("sect_")
+      ) |>
+      arrange(desc(`Imports from Origin (k$)`))
+  })
+  
+  output$dependency_table <- renderDT({
+    data <- filtered_dependency_data()
+    
+    datatable(
+      data,
+      rownames  = FALSE,
+      selection = "none",
+      options = list(
+        pageLength = 10,
+        language = list(
+          search      = "Search:",
+          lengthMenu  = "Show _MENU_ entries",
+          info        = "Showing _START_ to _END_ of _TOTAL_ entries",
+          paginate    = list(previous = "Previous", `next` = "Next"),
+          emptyTable  = "No product where the importer is dependent and this exporter is the dominant supplier (>50%)."
+        ),
+        order = list(list(which(colnames(data) == "Imports from Origin (k$)") - 1, "desc"))
+      )
+    ) |>
+      formatCurrency(
+        columns  = c("Total Imports (World, k$)", "Imports from Origin (k$)"),
+        currency = "",
+        interval = 3,
+        mark     = ".",
+        digits   = 0
+      ) |>
+      formatRound(columns = "Share from Origin (%)", digits = 1)
+  })
+  
+  output$download_table <- downloadHandler(
+    filename = function() {
+      selection <- selected_countries()
+      if (length(selection) == 2) {
+        paste0("dependencies_", selection[1], "_from_", selection[2], "_",
+               Sys.Date(), ".csv")
+      } else {
+        paste0("dependencies_", Sys.Date(), ".csv")
+      }
+    },
+    content = function(file) {
+      write.csv(filtered_dependency_data(), file, row.names = FALSE)
+    }
+  )
+}
+
+shinyApp(ui = ui, server = server)

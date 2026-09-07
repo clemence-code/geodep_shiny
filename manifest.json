@@ -3,7 +3,7 @@
   "locale": "fr_FR",
   "platform": "4.4.0",
   "metadata": {
-    "appmode": "quarto-static",
+    "appmode": "quarto-shiny",
     "primary_rmd": "geodep.qmd",
     "primary_html": null,
     "content_category": null,
@@ -3111,8 +3111,47 @@
     "1_Data/world_polygons_cache.rds": {
       "checksum": "8716e9fcef9941a68c042cd219cd1422"
     },
+    "geodep.html": {
+      "checksum": "a5ed94bd9404a8433e93497164b52e9a"
+    },
     "geodep.qmd": {
-      "checksum": "7a68454fa021cfa4b93e6eb1cf1bcd4e"
+      "checksum": "9bcc5d413ba70457e5f5da27157af068"
+    },
+    "geodep.R": {
+      "checksum": "b3d17019e5c056a59f3bfc3e88f3e45e"
+    },
+    "geodep_files/libs/bootstrap/bootstrap-icons.css": {
+      "checksum": "7368407d15110275bb7af49476ae70f2"
+    },
+    "geodep_files/libs/bootstrap/bootstrap-icons.woff": {
+      "checksum": "dfd2a6bd06f9dd7437ee67673cd9c447"
+    },
+    "geodep_files/libs/bootstrap/bootstrap.min.css": {
+      "checksum": "1b5decc78a8be27abce0b265e51283ff"
+    },
+    "geodep_files/libs/bootstrap/bootstrap.min.js": {
+      "checksum": "7ccd9d390d31af98110f74f842ea9b32"
+    },
+    "geodep_files/libs/clipboard/clipboard.min.js": {
+      "checksum": "15f52a1ee547f2bdd46e56747332ca2d"
+    },
+    "geodep_files/libs/quarto-html/anchor.min.js": {
+      "checksum": "a58f4bdbf86e8ae057af9131b5b1bcfd"
+    },
+    "geodep_files/libs/quarto-html/popper.min.js": {
+      "checksum": "ad6c106f3ba17d5a54d8053a4c4899ca"
+    },
+    "geodep_files/libs/quarto-html/quarto-syntax-highlighting.css": {
+      "checksum": "49bff82b9355f257417faaaa77dd1607"
+    },
+    "geodep_files/libs/quarto-html/quarto.js": {
+      "checksum": "e2f4880ce6c3de9af6a724b53acf8607"
+    },
+    "geodep_files/libs/quarto-html/tippy.css": {
+      "checksum": "ebd6f8ce46a677e1a4f5f8a8317109a9"
+    },
+    "geodep_files/libs/quarto-html/tippy.umd.min.js": {
+      "checksum": "d828775275749701b48bd9d958814111"
     },
     "preparation.qmd": {
       "checksum": "4d05b6a52c737fe716869ab7727d7903"
