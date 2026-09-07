@@ -1,0 +1,233 @@
+---
+title: "Geodep"
+author: "Clemence HUANG"
+execute:
+  echo: false
+format:
+  pdf:
+    toc: true
+editor: visual
+---
+
+```{r}
+library(here)
+library(dplyr)
+library(readxl)
+library(tidyr)
+library(stringr)
+library(purrr)
+library(countrycode)
+library(haven)
+library(rnaturalearth)
+library(sf)
+
+rm(list = ls())
+here::i_am('geodep_shiny.Rproj')
+
+DEP_YEAR <- 2024  
+```
+
+## 0. Reference / sector lists
+
+```{r}
+CRM_UNCTAD    <- read_excel("1_Data/1_CRM_UNCTAd_final.xlsx")
+Dual_use_EU   <- read_excel("1_Data/2_Dual_use_EU_final.xlsx")
+Health_CEPII  <- read_excel("1_Data/3_health_product_nomenclature_final.xlsx")
+Fertilisers_FAO <- read_excel("1_Data/4_Fertilisants_FAO_final.xlsx")
+Agrifood_WB   <- read_excel("1_Data/5_Agrifood_World_Bank_final.xlsx")
+Energy_ECT    <- read_excel("1_Data/6_Energy_ECt_final.xlsx")
+```
+
+## 1. Imports
+
+```{r}
+imports_hs22 <- read_dta("1_Data/imports_hs22.dta")
+
+base_data <- imports_hs22 |>
+  filter(!is.na(hs6) & hs6 != "", year == DEP_YEAR, iso_o != iso_d)
+
+rm(imports_hs22); gc()
+
+imports_final <- read_dta("1_Data/data_dep_M_hs22.dta") |>
+  filter(year == DEP_YEAR)
+
+hs6_description <- read_excel("1_Data/hs22_hs6.xlsx")
+colnames(hs6_description)[2] <- "hs6"
+
+imports_final <- imports_final |>
+  left_join(hs6_description, by = "hs6")
+```
+
+## 2. Exports
+
+```{r}
+exports_final <- read_dta("1_Data/data_dep_X_hs22.dta") |>
+  filter(year == DEP_YEAR)
+
+prep_sector <- function(df, col_name) {
+  if ("code_hs6_kept" %in% names(df)) {
+    df |>
+      select(hs6 = code_hs6_kept) |>
+      mutate(hs6 = str_trim(as.character(hs6))) |>
+      filter(!is.na(hs6) & hs6 != "" & hs6 != ".") |>
+      distinct() |>
+      mutate(!!col_name := 1)
+  } else {
+    tibble(hs6 = character(), !!col_name := numeric())
+  }
+}
+
+crm_hs6    <- prep_sector(CRM_UNCTAD, "sect_crm")
+dual_hs6   <- prep_sector(Dual_use_EU, "sect_dual_use")
+health_hs6 <- prep_sector(Health_CEPII, "sect_health")
+fert_hs6   <- prep_sector(Fertilisers_FAO, "sect_fert_temp")
+agri_hs6   <- prep_sector(Agrifood_WB, "sect_agri_temp")
+energy_hs6 <- prep_sector(Energy_ECT, "sect_energy")
+
+exports_final <- exports_final |>
+  left_join(crm_hs6, by = "hs6") |>
+  left_join(dual_hs6, by = "hs6") |>
+  left_join(health_hs6, by = "hs6") |>
+  left_join(fert_hs6, by = "hs6") |>
+  left_join(agri_hs6, by = "hs6") |>
+  left_join(energy_hs6, by = "hs6") |>
+  mutate(across(starts_with("sect_"), ~replace_na(.x, 0))) |>
+  mutate(
+    sect_agrifood = if_else(sect_fert_temp == 1 | sect_agri_temp == 1, 1, 0),
+    sect_other = if_else(sect_agrifood == 0 & sect_crm == 0 & sect_health == 0 &
+                         sect_energy == 0 & sect_dual_use == 0, 1, 0)
+  ) |>
+  select(-sect_fert_temp, -sect_agri_temp)
+```
+
+## 3. Descriptive-stats precomputation
+
+```{r}
+eu_countries <- c("DEU", "AUT", "BEL", "BGR", "CYP", "HRV", "DNK", "ESP",
+                  "EST", "FIN", "FRA", "GRC", "HUN", "IRL", "ITA", "LVA",
+                  "LTU", "LUX", "MLT", "NLD", "POL", "PRT", "ROU", "SVK",
+                  "SVN", "SWE", "CZE")
+
+sector_names <- c(
+  "sect_crm" = "Critical Raw Materials",
+  "sect_dual_use" = "Dual Use",
+  "sect_health" = "Health",
+  "sect_agrifood" = "Agrifood",
+  "sect_energy" = "Energy",
+  "sect_other" = "Other"
+)
+
+sector_choices <- c(
+  "All Sectors"             = "all",
+  "Critical Raw Materials"  = "sect_crm",
+  "Dual Use"                = "sect_dual_use",
+  "Health"                  = "sect_health",
+  "Agrifood"                = "sect_agrifood",
+  "Energy"                  = "sect_energy",
+  "Other"                   = "sect_other"
+)
+
+to_eun <- function(iso3) {
+  if_else(iso3 %in% eu_countries, "EUN", iso3)
+}
+
+world_polygons_cache_path <- "1_Data/world_polygons_cache.rds"
+
+world_polygons <- ne_countries(scale = "medium", returnclass = "sf") |>
+  mutate(
+    iso_a3 = case_when(
+      !is.na(iso_a3)    & iso_a3    != "-99" & iso_a3    != "" ~ iso_a3,
+      !is.na(iso_a3_eh) & iso_a3_eh != "-99" & iso_a3_eh != "" ~ iso_a3_eh,
+      !is.na(adm0_a3)   & adm0_a3   != "-99" & adm0_a3   != "" ~ adm0_a3,
+      TRUE ~ countrycode(name_long, origin = "country.name", destination = "iso3c")
+    )
+  ) |>
+  filter(!is.na(iso_a3))
+
+old_s2 <- sf::sf_use_s2()
+sf::sf_use_s2(FALSE)
+
+world_polygons <- world_polygons |>
+  sf::st_wrap_dateline(options = c("WRAPDATELINE=YES", "DATELINEOFFSET=180")) |>
+  sf::st_make_valid()
+
+sf::sf_use_s2(old_s2)
+
+saveRDS(world_polygons, world_polygons_cache_path)
+
+iso_name_lookup <- world_polygons |>
+  sf::st_drop_geometry() |>
+  group_by(iso_a3) |>
+  slice(1) |>
+  ungroup() |>
+  select(iso_a3, name) |>
+  bind_rows(tibble(iso_a3 = "EUN", name = "European Union"))
+
+country_choices_lookup <- iso_name_lookup |>
+  filter(!iso_a3 %in% eu_countries)
+
+country_choices <- setNames(country_choices_lookup$iso_a3, country_choices_lookup$name)
+country_choices <- country_choices[order(names(country_choices))]
+country_choices_ui <- c("Select a country..." = "", country_choices)
+
+dep_import_base <- base_data |>
+  mutate(iso_d = to_eun(iso_d), iso_o = to_eun(iso_o)) |>
+  inner_join(
+    imports_final |> mutate(iso_d = to_eun(iso_d)),
+    by = c("iso_d", "hs6", "year")
+  ) |>
+  filter(dependant_M_MC_t == 1, c4_M_MC == 1) |>
+  select(iso_d, iso_o, hs6, imports, import_dpt,
+         Description, starts_with("sect_"))
+
+dep_export_base <- base_data |>
+  mutate(iso_o = to_eun(iso_o), iso_d = to_eun(iso_d)) |>
+  inner_join(
+    exports_final |> mutate(iso_o = to_eun(iso_o)),
+    by = c("iso_o", "hs6", "year")
+  ) |>
+  filter(dependant_X_MC_t == 1, c4_X_MC == 1) |>
+  select(iso_o, iso_d, hs6, imports, export_opt,
+         starts_with("sect_"))
+
+traded_by_country <- imports_final |>
+  mutate(iso_d = to_eun(iso_d)) |>
+  select(iso_d, hs6, dependant_M_MC_t, c4_M_MC, import_dpt, starts_with("sect_"))
+
+traded_by_country_export <- exports_final |>
+  mutate(iso_o = to_eun(iso_o)) |>
+  select(iso_o, hs6, dependant_X_MC_t, c4_X_MC, export_opt, starts_with("sect_"))
+
+imports_sector_long_all <- imports_final |>
+  mutate(iso_d = to_eun(iso_d)) |>
+  mutate(dep_all = if_else(dependant_M_MC_t == 1 & c4_M_MC == 1, 1, 0)) |>
+  select(iso_d, hs6, dep_all, starts_with("sect_")) |>
+  pivot_longer(cols = starts_with("sect_"), names_to = "Sector", values_to = "is_in_sector") |>
+  filter(is_in_sector == 1) |>
+  mutate(Sector_Name = sector_names[Sector])
+```
+
+## 4. Save everything the app needs
+
+```{r}
+geodep_inputs <- list(
+  DEP_YEAR                 = DEP_YEAR,
+  eu_countries              = eu_countries,
+  sector_names               = sector_names,
+  sector_choices              = sector_choices,
+  world_polygons                = world_polygons,
+  iso_name_lookup                 = iso_name_lookup,
+  country_choices                    = country_choices,
+  country_choices_ui                   = country_choices_ui,
+  dep_import_base                        = dep_import_base,
+  dep_export_base                          = dep_export_base,
+  traded_by_country                          = traded_by_country,
+  traded_by_country_export                     = traded_by_country_export,
+  imports_sector_long_all                        = imports_sector_long_all
+)
+
+saveRDS(geodep_inputs, "1_Data/geodep_shiny_inputs.rds")
+
+cat("Precomputation done. Saved 1_Data/geodep_shiny_inputs.rds",
+    "(", format(object.size(geodep_inputs), units = "MB"), ")\n")
+```
