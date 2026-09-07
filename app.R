@@ -289,7 +289,7 @@ server <- function(input, output, session) {
                 " all three criteria above must hold in at least two of the last three years, so a one-off or temporary spike in concentration does not count as a structural dependency.")
       ),
       p("The same four criteria, applied symmetrically, define ", tags$strong("export-dependent"),
-        " products: import concentration and world import concentration replace the export-side equivalents, and the roles of imports and exports are reversed in the non-substitutability ratio. Use the \u201cShow dependencies for\u201d toggle above the map to switch between the two views."),
+        " products: export concentration and world import concentration replace the export-side equivalents, and the roles of imports and exports are reversed in the non-substitutability ratio. Use the \u201cShow dependencies for\u201d toggle above the map to switch between the two views."),
       p("On the map, exposure is shown either as the share of traded HS6 products for which the country is dependent (\u201cShare of products\u201d), or as the share of its total trade value concentrated in those dependent products (\u201cShare of trade value\u201d)."),
       p("When an Importer and an Exporter are both selected, the partner panels list their top-3 ",
         tags$em("bilateral"), " dependency partners \u2014 an additional, stricter criterion applied on top of the four above: for the Importer, the exporters supplying more than 50% of a given dependent product's import value; for the Exporter, the destinations absorbing more than 50% of a given dependent product's export value."),
