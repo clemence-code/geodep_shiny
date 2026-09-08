@@ -1,0 +1,26 @@
+{
+    "id": "BAA7E91A",
+    "path": "D:/GitHub/geodep_shiny/app.R",
+    "project_path": "app.R",
+    "type": "r_source",
+    "hash": "3142246556",
+    "contents": "",
+    "dirty": false,
+    "created": 1788883196297.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "251,5",
+        "scrollLine": "222"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1788884010,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1788884010239,
+    "read_only": false,
+    "read_only_alternatives": []
+}
