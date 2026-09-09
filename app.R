@@ -235,18 +235,31 @@ ui <- fluidPage(
                                            selected = "count")),
                     column(4,
                            tags$div(style = "margin-top: 25px;",
-                                    actionButton("swap_button", "\u21c4 Swap", style = "margin-right: 8px;"),
                                     actionButton("reset_button", "Reset selection", style = "margin-right: 8px;"),
                                     actionButton("info_button", "\u2139 Methodology"))
                     )
            ),
-           fluidRow(class = "controls-row",
-                    column(6, selectizeInput("importer_select", "Importer (Destination):",
-                                             choices = country_choices_ui, selected = "",
-                                             options = list(placeholder = "Type a country name..."))),
-                    column(6, selectizeInput("exporter_select", "Exporter (Origin):",
-                                             choices = country_choices_ui, selected = "",
-                                             options = list(placeholder = "Type a country name...")))
+           tags$div(
+             style = "display: flex; align-items: flex-end; gap: 20px; margin-bottom: 24px;",
+             tags$div(
+               style = "flex: 1;",
+               selectizeInput("importer_select", "Importer (Destination):",
+                              choices = country_choices_ui, selected = "",
+                              options = list(placeholder = "Type a country name..."),
+                              width = "100%")
+             ),
+             tags$div(
+               style = "flex: 0 0 auto; margin-bottom: 20px;",
+               tags$label(style = "visibility: hidden; display: block;", "Swap"),
+               actionButton("swap_button", "\u21c4 Swap")
+             ),
+             tags$div(
+               style = "flex: 1;",
+               selectizeInput("exporter_select", "Exporter (Origin):",
+                              choices = country_choices_ui, selected = "",
+                              options = list(placeholder = "Type a country name..."),
+                              width = "100%")
+             )
            ),
            leafletOutput("dependency_map", height = "700px")
     )
@@ -446,8 +459,13 @@ server <- function(input, output, session) {
       setMaxBounds(-180, -85, 180, 85) |>
       htmlwidgets::onRender(
         "function(el, x) {
-         L.control.zoom({ position: 'topright' }).addTo(this);
-       }" )
+          L.control.zoom({ position: 'bottomright' }).addTo(this);
+          var map = this;
+          setTimeout(function() {
+            map.invalidateSize();
+            map.fitBounds([[-58, -170], [83, 190]]);
+          }, 200);
+        }" )
   })
   
   observe({
@@ -458,7 +476,7 @@ server <- function(input, output, session) {
     
     fill_values  <- if (metric == "count") map_sf$count_share else map_sf$value_share
     metric_label <- if (metric == "count") {
-      paste0("Share of dependent products (", direction_label, "s)")
+      paste0("Share of dependent products <br/>(", direction_label, "s)")
     } else {
       paste0("Share of dependent trade value (", direction_label, "s)")
     }
@@ -515,9 +533,8 @@ server <- function(input, output, session) {
         position  = "bottomleft",
         pal       = pal,
         values    = fill_values,
-        title     = paste0(metric_label, "\n(%)"),
-        labFormat = labelFormat(suffix = "%"),
-        na.label  = "0%"
+        title     = HTML(paste0(metric_label, "(%)")),
+        labFormat = labelFormat(suffix = "%")
       )
     
     if (length(sel) >= 1) {
