@@ -581,11 +581,13 @@ server <- function(input, output, session) {
         position  = "bottomleft",
         pal       = pal,
         values    = fill_values,
-        title     = HTML(paste0(metric_label, "<br/>(%)")),
+        title     = HTML(paste0(
+          metric_label, "<br/>(%)",
+          "<br/><span style='font-weight:normal; font-size:10px; color:#666;'>Source: GeoDep IFE-CEPII (2026)</span>"
+        )),
         labFormat = labelFormat(suffix = "%"),
         na.label  = "0%"
-      )
-    
+      ) 
     if (length(sel) >= 1) {
       imp_sf <- map_sf |> filter(iso_plot == sel[1])
       if (nrow(imp_sf) > 0) {
