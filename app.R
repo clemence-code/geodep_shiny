@@ -685,7 +685,7 @@ server <- function(input, output, session) {
         columns  = c("Total Imports (World, k$)", "Imports from Origin (k$)"),
         currency = "",
         interval = 3,
-        mark     = ".",
+        mark     = ",",
         digits   = 0
       ) |>
       formatRound(columns = "Share from Origin (%)", digits = 1)
