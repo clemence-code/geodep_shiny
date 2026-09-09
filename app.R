@@ -59,6 +59,7 @@ iso_name <- function(iso3) {
 ## -----------------------------------------------------------------------
 ## 2. UI
 ## -----------------------------------------------------------------------
+
 ui <- fluidPage(
   tags$head(
     tags$style(HTML("
@@ -234,7 +235,7 @@ ui <- fluidPage(
       .main-panel {
         flex: 1;
         min-width: 0;
-      }
+      }up down 
       .sidebar-section {
         margin-bottom: 22px;
       }
@@ -252,6 +253,21 @@ ui <- fluidPage(
       }
       .sidebar-actions .btn {
         flex: 1;
+      }
+      
+      @media (max-width: 768px) {
+        .app-layout {
+          flex-direction: column;
+        }
+        .sidebar-panel {
+          flex: none;
+          width: 100%;
+          position: static;
+          margin-bottom: 20px;
+        }
+        .title-banner h1 {
+          font-size: 24px;
+        }
       }
     "))
   ),
@@ -287,7 +303,7 @@ ui <- fluidPage(
                              options = list(placeholder = "Type a country name..."),
                              width = "100%"),
               div(class = "swap-wrap",
-                  actionButton("swap_button", "\u21c4 Swap")
+                  actionButton("swap_button", "\u21c5 Swap")
               ),
               selectizeInput("exporter_select", "Exporter (Origin):",
                              choices = country_choices_ui, selected = "",
