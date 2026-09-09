@@ -315,6 +315,18 @@ server <- function(input, output, session) {
     selected_countries(character())
   })
   
+  observeEvent(input$dep_direction, {
+    if (input$dep_direction == "export") {
+      updateSelectInput(session, "sector_filter",
+                        choices = c("All Sectors" = "all"),
+                        selected = "all")
+    } else {
+      updateSelectInput(session, "sector_filter",
+                        choices = sector_choices,
+                        selected = "all")
+    }
+  }, ignoreInit = FALSE)
+  
   observeEvent(selected_countries(), {
     sel <- selected_countries()
     imp <- if (length(sel) >= 1) sel[1] else ""
@@ -500,7 +512,7 @@ server <- function(input, output, session) {
         )
       ) |>
       addLegend(
-        position  = "bottomright",
+        position  = "bottomleft",
         pal       = pal,
         values    = fill_values,
         title     = paste0(metric_label, "\n(%)"),
