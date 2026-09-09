@@ -41,6 +41,8 @@ Energy_ECT    <- read_excel("1_Data/6_Energy_ECt_final.xlsx")
 ## 1. Imports
 
 ```{r}
+## 1. Imports
+
 imports_hs22 <- read_dta("1_Data/imports_hs22.dta")
 
 base_data <- imports_hs22 |>
@@ -55,7 +57,11 @@ hs6_description <- read_excel("1_Data/hs22_hs6.xlsx")
 colnames(hs6_description)[2] <- "hs6"
 
 imports_final <- imports_final |>
-  left_join(hs6_description, by = "hs6")
+  left_join(hs6_description, by = "hs6") |>
+  mutate(
+    sect_strategic = if_else(sect_crm == 1 | sect_dual_use == 1 | sect_health == 1 |
+                             sect_agrifood == 1 | sect_energy == 1, 1, 0)
+  )
 ```
 
 ## 2. Exports
@@ -95,7 +101,9 @@ exports_final <- exports_final |>
   mutate(
     sect_agrifood = if_else(sect_fert_temp == 1 | sect_agri_temp == 1, 1, 0),
     sect_other = if_else(sect_agrifood == 0 & sect_crm == 0 & sect_health == 0 &
-                         sect_energy == 0 & sect_dual_use == 0, 1, 0)
+                         sect_energy == 0 & sect_dual_use == 0, 1, 0),
+    sect_strategic = if_else(sect_crm == 1 | sect_dual_use == 1 | sect_health == 1 |
+                             sect_agrifood == 1 | sect_energy == 1, 1, 0)
   ) |>
   select(-sect_fert_temp, -sect_agri_temp)
 ```
@@ -114,11 +122,13 @@ sector_names <- c(
   "sect_health" = "Health",
   "sect_agrifood" = "Agrifood",
   "sect_energy" = "Energy",
-  "sect_other" = "Other"
+  "sect_other" = "Other",
+  "sect_strategic" = "Strategic Sector"
 )
 
 sector_choices <- c(
   "All Sectors"             = "all",
+  "Strategic Sector"        = "sect_strategic",
   "Critical Raw Materials"  = "sect_crm",
   "Dual Use"                = "sect_dual_use",
   "Health"                  = "sect_health",

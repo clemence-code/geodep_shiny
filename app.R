@@ -227,7 +227,7 @@ ui <- fluidPage(
                                            selected = "import"))
            ),
            fluidRow(class = "controls-row",
-                    column(4, selectInput("sector_filter", "Strategic sector:",
+                    column(4, selectInput("sector_filter", "Sector:",
                                           choices = sector_choices, selected = "all")),
                     column(4, radioButtons("map_metric", "Map shows:",
                                            choices = c("Share of products" = "count",
