@@ -36,6 +36,19 @@ imports_sector_long_all                         <- geodep_inputs$imports_sector_
 
 rm(geodep_inputs); gc()
 
+sector_choices_ui <- list(
+  "All Sectors" = "all",
+  "Strategic Sector" = c(
+    "All Strategic Sectors"        = "sect_strategic",
+    "\u2003Critical Raw Materials" = "sect_crm",
+    "\u2003Dual Use"               = "sect_dual_use",
+    "\u2003Health"                 = "sect_health",
+    "\u2003Agrifood"               = "sect_agrifood",
+    "\u2003Energy"                 = "sect_energy"
+  ),
+  "Other" = c("Other" = "sect_other")
+)
+
 ## -----------------------------------------------------------------------
 ## 1. Small helpers 
 ## -----------------------------------------------------------------------
@@ -168,6 +181,17 @@ ui <- fluidPage(
         border-color: #1f6f5c;
         box-shadow: 0 0 0 2px rgba(31, 111, 92, 0.2);
       }
+      
+      select#sector_filter optgroup {
+        font-weight: 700;
+        font-style: normal;
+      color: #1f6f5c;
+      }
+      
+      select#sector_filter option {
+        font-weight: normal;
+        color: #2b2b2b;
+      }
       .radio-inline, .radio label {
         color: #2b2b2b;
         font-weight: normal;
@@ -184,7 +208,7 @@ ui <- fluidPage(
         padding: 20px 24px;
         margin-bottom: 20px;
       }
-
+      
       #dependency_map {
         border: 1px solid #b7cdc6;
         border-radius: 4px;
@@ -289,7 +313,7 @@ ui <- fluidPage(
           ),
           div(class = "sidebar-section",
               selectInput("sector_filter", "Sector:",
-                          choices = sector_choices, selected = "all", width = "100%")
+                          choices = sector_choices_ui, selected = "all", width = "100%")
           ),
           div(class = "sidebar-section",
               radioButtons("map_metric", "Map shows:",
@@ -384,7 +408,7 @@ server <- function(input, output, session) {
                         selected = "all")
     } else {
       updateSelectInput(session, "sector_filter",
-                        choices = sector_choices,
+                        choices = sector_choices_ui,
                         selected = "all")
     }
   }, ignoreInit = FALSE)
