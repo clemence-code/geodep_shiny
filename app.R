@@ -100,10 +100,6 @@ ui <- fluidPage(
         line-height: 1.6;
       }
 
-      .controls-row {
-        margin-bottom: 24px;
-      }
-
       h3, h4 {
         color: #1f6f5c;
       }
@@ -154,6 +150,10 @@ ui <- fluidPage(
       #download_table:hover {
         background-color: #6e2c2c;
       }
+      #swap_button {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
 
       .form-group {
         margin-bottom: 20px;
@@ -188,8 +188,16 @@ ui <- fluidPage(
         border: 1px solid #b7cdc6;
         border-radius: 4px;
         margin-bottom: 30px;
-        max-width: 1024px; margin-left: auto; margin-right: auto;
+      }
 
+      .leaflet-control.info.legend {
+        font-size: 11px;
+        padding: 6px 10px;
+        line-height: 1.3;
+        max-width: 170px;
+      }
+      .leaflet-control.info.legend strong {
+        font-size: 11px;
       }
 
       hr {
@@ -208,6 +216,43 @@ ui <- fluidPage(
       .dataTables_wrapper {
         margin-top: 10px;
       }
+
+      .app-layout {
+        display: flex;
+        gap: 24px;
+        align-items: flex-start;
+      }
+      .sidebar-panel {
+        flex: 0 0 300px;
+        background-color: #ffffff;
+        border: 1px solid #cfe0da;
+        border-radius: 6px;
+        padding: 22px;
+        position: sticky;
+        top: 20px;
+      }
+      .main-panel {
+        flex: 1;
+        min-width: 0;
+      }
+      .sidebar-section {
+        margin-bottom: 22px;
+      }
+      .sidebar-section:last-child {
+        margin-bottom: 0;
+      }
+      .swap-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 2px 0 18px 0;
+      }
+      .sidebar-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .sidebar-actions .btn {
+        flex: 1;
+      }
     "))
   ),
   
@@ -215,71 +260,61 @@ ui <- fluidPage(
       h1("GeoDep \u2014 Trade Dependencies")
   ),
   
-  fluidRow(
-    column(12,
-           div(class = "intro-text",
-               p("Click a country on the map to select it as the Importer (Destination); click a second country to select it as the Exporter (Origin). You can also search by name below. Click a third time on the map, or use Reset, to start over. EU-27 member states are treated as a single entity (EUN).")
-           ),
-           fluidRow(class = "controls-row",
-                    column(4, radioButtons("dep_direction", "Show dependencies for:",
-                                           choices = c("Imports" = "import",
-                                                       "Exports" = "export"),
-                                           selected = "import"))
-           ),
-           fluidRow(class = "controls-row",
-                    column(4, selectInput("sector_filter", "Sector:",
-                                          choices = sector_choices, selected = "all")),
-                    column(4, radioButtons("map_metric", "Map shows:",
-                                           choices = c("Share of products" = "count",
-                                                       "Share of trade value" = "value"),
-                                           selected = "count")),
-                    column(4,
-                           tags$div(style = "margin-top: 25px;",
-                                    actionButton("reset_button", "Reset selection", style = "margin-right: 8px;"),
-                                    actionButton("info_button", "\u2139 Methodology"))
-                    )
-           ),
-           tags$div(
-             style = "display: flex; align-items: flex-end; gap: 20px; margin-bottom: 24px;",
-             tags$div(
-               style = "flex: 1;",
-               selectizeInput("importer_select", "Importer (Destination):",
-                              choices = country_choices_ui, selected = "",
-                              options = list(placeholder = "Type a country name..."),
-                              width = "100%")
-             ),
-             tags$div(
-               style = "flex: 0 0 auto; margin-bottom: 20px;",
-               tags$label(style = "visibility: hidden; display: block;", "Swap"),
-               actionButton("swap_button", "\u21c4 Swap")
-             ),
-             tags$div(
-               style = "flex: 1;",
-               selectizeInput("exporter_select", "Exporter (Origin):",
-                              choices = country_choices_ui, selected = "",
-                              options = list(placeholder = "Type a country name..."),
-                              width = "100%")
-             )
-           ),
-           leafletOutput("dependency_map", height = "700px")
-    )
+  div(class = "intro-text",
+      p("Click a country on the map to select it as the Importer (Destination); click a second country to select it as the Exporter (Origin). You can also search by name below. Click a third time on the map, or use Reset, to start over. EU-27 member states are treated as a single entity (EUN).")
   ),
   
-  fluidRow(class = "section-block",
-           column(12,
-                  h3(textOutput("selection_status")),
-                  uiOutput("partners_panel"),
-                  hr(),
-                  downloadButton("download_table", "Download Table (CSV)"),
-                  br(), br(),
-                  DTOutput("dependency_table")
-           )
+  div(class = "app-layout",
+      div(class = "sidebar-panel",
+          div(class = "sidebar-section",
+              radioButtons("dep_direction", "Show dependencies for:",
+                           choices = c("Imports" = "import", "Exports" = "export"),
+                           selected = "import")
+          ),
+          div(class = "sidebar-section",
+              selectInput("sector_filter", "Sector:",
+                          choices = sector_choices, selected = "all", width = "100%")
+          ),
+          div(class = "sidebar-section",
+              radioButtons("map_metric", "Map shows:",
+                           choices = c("Share of products" = "count",
+                                       "Share of trade value" = "value"),
+                           selected = "count")
+          ),
+          div(class = "sidebar-section",
+              selectizeInput("importer_select", "Importer (Destination):",
+                             choices = country_choices_ui, selected = "",
+                             options = list(placeholder = "Type a country name..."),
+                             width = "100%"),
+              div(class = "swap-wrap",
+                  actionButton("swap_button", "\u21c4 Swap")
+              ),
+              selectizeInput("exporter_select", "Exporter (Origin):",
+                             choices = country_choices_ui, selected = "",
+                             options = list(placeholder = "Type a country name..."),
+                             width = "100%")
+          ),
+          div(class = "sidebar-section sidebar-actions",
+              actionButton("reset_button", "Reset selection"),
+              actionButton("info_button", "\u2139 Methodology")
+          )
+      ),
+
+      div(class = "main-panel",
+          leafletOutput("dependency_map", height = "650px"),
+          
+          div(class = "section-block",
+              h3(textOutput("selection_status")),
+              uiOutput("partners_panel"),
+              hr(),
+              downloadButton("download_table", "Download Table (CSV)"),
+              br(), br(),
+              DTOutput("dependency_table")
+          )
+      )
   )
 )
 
-## -----------------------------------------------------------------------
-## 3. Server
-## -----------------------------------------------------------------------
 server <- function(input, output, session) {
   selected_countries <- reactiveVal(character())
   
@@ -305,11 +340,11 @@ server <- function(input, output, session) {
                 " all three criteria above must hold in at least two of the last three years, so a one-off or temporary spike in concentration does not count as a structural dependency.")
       ),
       p("The same four criteria, applied symmetrically, define ", tags$strong("export-dependent"),
-        " products: export concentration and world import concentration replace the export-side equivalents, and the roles of imports and exports are reversed in the non-substitutability ratio. Use the \u201cShow dependencies for\u201d toggle above the map to switch between the two views."),
+        " products: import concentration and world import concentration replace the export-side equivalents, and the roles of imports and exports are reversed in the non-substitutability ratio. Use the \u201cShow dependencies for\u201d toggle above the map to switch between the two views."),
       p("On the map, exposure is shown either as the share of traded HS6 products for which the country is dependent (\u201cShare of products\u201d), or as the share of its total trade value concentrated in those dependent products (\u201cShare of trade value\u201d)."),
       p("When an Importer and an Exporter are both selected, the partner panels list their top-3 ",
         tags$em("bilateral"), " dependency partners \u2014 an additional, stricter criterion applied on top of the four above: for the Importer, the exporters supplying more than 50% of a given dependent product's import value; for the Exporter, the destinations absorbing more than 50% of a given dependent product's export value."),
-      p("Sector groupings in this app (Critical Raw Materials, Dual Use, Health, Agrifood, Energy, Other) come from dedicated reference lists (UNCTAD, EU dual-use regulation, CEPII health nomenclature, FAO, World Bank) and are not identical to the broader set of \u201cstrategic sectors\u201d (based on the EU's strategic ecosystems) used in the CEPII policy brief."),
+      p("Sector groupings in this app (Critical Raw Materials, Dual Use, Health, Agrifood, Energy, Other) come from dedicated reference lists (UNCTAD, EU dual-use regulation, CEPII health nomenclature, FAO, World Bank); \u201cStrategic Sector\u201d groups all products in any of these five sectors together, and is not identical to the broader set of \u201cstrategic sectors\u201d (based on the EU's strategic ecosystems) used in the CEPII policy brief."),
       p("Figures reflect 2024 (the only year for which the dependency indicators are available in this dataset) and EU-27 member states are aggregated into a single entity (EUN)."),
       easyClose = TRUE,
       footer = modalButton("Close")
@@ -323,12 +358,10 @@ server <- function(input, output, session) {
   observeEvent(input$sector_filter, {
     selected_countries(character())
   })
-  
+
   observeEvent(input$dep_direction, {
     selected_countries(character())
-  })
-  
-  observeEvent(input$dep_direction, {
+    
     if (input$dep_direction == "export") {
       updateSelectInput(session, "sector_filter",
                         choices = c("All Sectors" = "all"),
@@ -451,21 +484,20 @@ server <- function(input, output, session) {
   })
   
   output$dependency_map <- renderLeaflet({
-    leaflet(options = leafletOptions(zoomControl = FALSE,  minZoom = 2, maxZoom = 6,
+    leaflet(options = leafletOptions(zoomControl = FALSE, minZoom = 2, maxZoom = 6,
                                      maxBoundsViscosity = 1.0)) |>
       addProviderTiles(providers$Esri.WorldGrayCanvas,
                        options = providerTileOptions(noWrap = TRUE)) |>
-      setView(lng = 0, lat = 30, zoom = 2)|>
       setMaxBounds(-180, -85, 180, 85) |>
       htmlwidgets::onRender(
         "function(el, x) {
-          L.control.zoom({ position: 'bottomright' }).addTo(this);
-          var map = this;
-          setTimeout(function() {
-            map.invalidateSize();
-            map.fitBounds([[-58, -170], [83, 190]]);
-          }, 200);
-        }" )
+           L.control.zoom({ position: 'bottomright' }).addTo(this);
+           var map = this;
+           setTimeout(function() {
+             map.invalidateSize();
+             map.fitBounds([[-58, -170], [83, 190]]);
+           }, 200);
+         }" )
   })
   
   observe({
@@ -476,9 +508,9 @@ server <- function(input, output, session) {
     
     fill_values  <- if (metric == "count") map_sf$count_share else map_sf$value_share
     metric_label <- if (metric == "count") {
-      paste0("Share of dependent products <br/>(", direction_label, "s)")
+      paste0("Share of products dependent (", direction_label, "s)")
     } else {
-      paste0("Share of dependent trade value (", direction_label, "s)")
+      paste0("Share of trade value dependent (", direction_label, "s)")
     }
     
     pal <- colorNumeric(
@@ -533,8 +565,9 @@ server <- function(input, output, session) {
         position  = "bottomleft",
         pal       = pal,
         values    = fill_values,
-        title     = HTML(paste0(metric_label, "(%)")),
-        labFormat = labelFormat(suffix = "%")
+        title     = HTML(paste0(metric_label, "<br/>(%)")),
+        labFormat = labelFormat(suffix = "%"),
+        na.label  = "0%"
       )
     
     if (length(sel) >= 1) {
@@ -714,7 +747,7 @@ server <- function(input, output, session) {
         columns  = c("Total Imports (World, k$)", "Imports from Origin (k$)"),
         currency = "",
         interval = 3,
-        mark     = ",",
+        mark     = ".",
         digits   = 0
       ) |>
       formatRound(columns = "Share from Origin (%)", digits = 1)
