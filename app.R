@@ -235,7 +235,7 @@ ui <- fluidPage(
       .main-panel {
         flex: 1;
         min-width: 0;
-      }up down 
+      }
       .sidebar-section {
         margin-bottom: 22px;
       }
