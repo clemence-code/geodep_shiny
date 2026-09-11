@@ -339,7 +339,7 @@ ui <- fluidPage(
               actionButton("info_button", "\u2139 Methodology")
           )
       ),
-
+      
       div(class = "main-panel",
           leafletOutput("dependency_map", height = "650px"),
           
@@ -354,6 +354,10 @@ ui <- fluidPage(
       )
   )
 )
+
+## -----------------------------------------------------------------------
+## 3. Server
+## -----------------------------------------------------------------------
 
 server <- function(input, output, session) {
   selected_countries <- reactiveVal(character())
@@ -398,7 +402,7 @@ server <- function(input, output, session) {
   observeEvent(input$sector_filter, {
     selected_countries(character())
   })
-
+  
   observeEvent(input$dep_direction, {
     selected_countries(character())
     
@@ -668,26 +672,122 @@ server <- function(input, output, session) {
     }
   })
   
-  make_sector_chart <- function(iso) {
-    df <- imports_sector_long_all |>
-      filter(iso_d == iso) |>
+  ## -----------------------------------------------------------------------
+  ## Dynamic sector chart:
+  ## - bars = total dependent products by sector for country 1 (the
+  ##   Importer if dep_direction == "import", the Exporter if "export")
+  ## - each bar is split between "country 2 is the dominant partner
+  ##   (>50% of bilateral trade value)" and "other", using the same
+  ##   bilateral-dominance rule as the partners panel / table.
+  ## -----------------------------------------------------------------------
+  
+  sector_chart_data <- reactive({
+    selection <- selected_countries()
+    req(length(selection) >= 1)
+    
+    iso1 <- selection[1]
+    iso2 <- if (length(selection) >= 2) selection[2] else NA_character_
+    
+    # leaf sector codes only (drop "all" and the "sect_strategic" umbrella)
+    sector_cols <- setdiff(unlist(sector_choices_ui, use.names = FALSE),
+                           c("all", "sect_strategic"))
+    
+    if (input$dep_direction == "import") {
+      base <- dep_import_base |>
+        filter(iso_d == iso1) |>
+        group_by(hs6) |>
+        mutate(partner_share = imports / import_dpt) |>
+        ungroup() |>
+        mutate(is_dominant = !is.na(iso2) & iso_o == iso2 & partner_share > 0.5)
+    } else {
+      base <- dep_export_base |>
+        filter(iso_o == iso1) |>
+        group_by(hs6) |>
+        mutate(partner_share = imports / export_opt) |>
+        ungroup() |>
+        mutate(is_dominant = !is.na(iso2) & iso_d == iso2 & partner_share > 0.5)
+    }
+    
+    if (nrow(base) == 0) return(NULL)
+    
+    # one row per hs6 (collapse the multiple partner rows first, so a
+    # product isn't double counted across partners)
+    dominant_by_hs6 <- base |>
+      group_by(hs6) |>
+      summarise(is_dominant = any(is_dominant), .groups = "drop")
+    
+    sectors_by_hs6 <- base |>
+      distinct(hs6, across(all_of(sector_cols)))
+    
+    dominant_by_hs6 |>
+      left_join(sectors_by_hs6, by = "hs6") |>
+      pivot_longer(cols = all_of(sector_cols), names_to = "sector_code", values_to = "flag") |>
+      filter(flag == 1) |>
+      mutate(Sector_Name = unlist(sector_names[sector_code])) |>
       group_by(Sector_Name) |>
-      summarise(n_dep = sum(dep_all, na.rm = TRUE), .groups = "drop")
+      summarise(
+        n_dep      = n(),
+        n_dominant = sum(is_dominant),
+        .groups    = "drop"
+      ) |>
+      mutate(share_dominant = if_else(n_dep > 0, 100 * n_dominant / n_dep, 0))
+  })
+  
+  make_sector_chart <- function() {
+    df <- sector_chart_data()
+    if (is.null(df) || nrow(df) == 0) return(NULL)
     
-    if (nrow(df) == 0) return(NULL)
+    selection <- selected_countries()
+    iso1 <- selection[1]
+    iso2 <- if (length(selection) >= 2) selection[2] else NA_character_
+    direction_label <- if (input$dep_direction == "import") "exporter" else "importer"
+    flow_label       <- if (input$dep_direction == "import") "Import" else "Export"
     
-    highlighted_sector <- if (input$sector_filter == "all") NA_character_ else sector_names[[input$sector_filter]]
+    dominant_label <- if (!is.na(iso2)) paste0("Dominant: ", iso_display_name(iso2)) else "Other"
     
-    df <- df |> mutate(highlight = !is.na(highlighted_sector) & Sector_Name == highlighted_sector)
+    df_long <- df |>
+      mutate(n_other = n_dep - n_dominant) |>
+      select(Sector_Name, n_dep, n_dominant, n_other) |>
+      pivot_longer(cols = c(n_dominant, n_other), names_to = "category", values_to = "n") |>
+      mutate(category = if_else(category == "n_dominant", dominant_label, "Other / no dominant partner"))
     
-    ggplot(df, aes(x = reorder(Sector_Name, n_dep), y = n_dep, fill = highlight)) +
+    sector_order <- df |> arrange(n_dep) |> pull(Sector_Name)
+    df_long <- df_long |> mutate(Sector_Name = factor(Sector_Name, levels = sector_order))
+    
+    p <- ggplot(df_long, aes(x = Sector_Name, y = n, fill = category)) +
       geom_col() +
       coord_flip() +
-      scale_fill_manual(values = c(`TRUE` = "#e31a1c", `FALSE` = "#4a86c9"), guide = "none") +
-      labs(x = NULL, y = "Dependent products",
-           title = paste0("Import dependencies by sector - ", iso_display_name(iso), " (2024)")) +
-      theme_minimal(base_size = 11)
+      labs(
+        x = NULL, y = "Dependent products",
+        title = paste0(flow_label, " dependencies by sector - ", iso_display_name(iso1), " (2024)"),
+        subtitle = if (!is.na(iso2)) {
+          paste0("Share of dependent products where ", iso_display_name(iso2),
+                 " is the dominant ", direction_label, " (>50% of trade value)")
+        } else {
+          "Select a second country to see its share as dominant partner"
+        },
+        fill = NULL,
+        caption = "Source : GeoDep IFE-CEPII (2026)"
+      ) +
+      theme_minimal(base_size = 11) +
+      theme(
+        legend.position = "bottom",
+        plot.caption    = element_text(hjust = 1, size = 8, color = "#666666", face = "italic")
+      )
+    
+    if (!is.na(iso2)) {
+      p <- p + scale_fill_manual(values = setNames(c("#e31a1c", "#4a86c9"),
+                                                   c(dominant_label, "Other / no dominant partner")))
+    } else {
+      p <- p + scale_fill_manual(values = c("Other / no dominant partner" = "#4a86c9"), guide = "none")
+    }
+    
+    p
   }
+  
+  output$sector_chart <- renderPlot({
+    make_sector_chart()
+  })
   
   output$partners_panel <- renderUI({
     selection <- selected_countries()
@@ -706,12 +806,11 @@ server <- function(input, output, session) {
         tags$p(tags$em("Depends on for imports (top 3 exporters to it):")),
         tags$p(import_txt),
         tags$p(tags$em("Depends on for exports (top 3 destinations):")),
-        tags$p(export_txt),
-        plotOutput(paste0("sector_chart_", idx), height = "220px")
+        tags$p(export_txt)
       )
     }
     
-    if (length(selection) == 1) {
+    cards <- if (length(selection) == 1) {
       fluidRow(column(6, make_card_ui(1)))
     } else {
       fluidRow(
@@ -719,19 +818,11 @@ server <- function(input, output, session) {
         column(6, make_card_ui(2))
       )
     }
-  })
-  
-  observe({
-    selection <- selected_countries()
-    for (idx in seq_along(selection)) {
-      local({
-        i   <- idx
-        iso <- selection[i]
-        output[[paste0("sector_chart_", i)]] <- renderPlot({
-          make_sector_chart(iso)
-        })
-      })
-    }
+    
+    tagList(
+      cards,
+      plotOutput("sector_chart", height = "320px")
+    )
   })
   
   filtered_dependency_data <- reactive({
