@@ -159,7 +159,9 @@ ui <- fluidPage(
       }
       #download_table {
         background-color: #8b3a3a;
-        margin-top: 10px;
+        width: 100%;
+        display: block;
+        text-align: center;
       }
       #download_table:hover {
         background-color: #6e2c2c;
@@ -213,6 +215,7 @@ ui <- fluidPage(
         border: 1px solid #b7cdc6;
         border-radius: 4px;
         margin-bottom: 30px;
+        box-sizing: border-box;
       }
 
       .leaflet-control.info.legend {
@@ -253,8 +256,10 @@ ui <- fluidPage(
         border: 1px solid #cfe0da;
         border-radius: 6px;
         padding: 22px;
-        position: sticky;
-        top: 20px;
+        box-sizing: border-box;
+        min-height: 650px;
+        display: flex;
+        flex-direction: column;
       }
       .main-panel {
         flex: 1;
@@ -286,7 +291,7 @@ ui <- fluidPage(
         .sidebar-panel {
           flex: none;
           width: 100%;
-          position: static;
+          min-height: 0;
           margin-bottom: 20px;
         }
         .title-banner h1 {
@@ -337,6 +342,10 @@ ui <- fluidPage(
           div(class = "sidebar-section sidebar-actions",
               actionButton("reset_button", "Reset selection"),
               actionButton("info_button", "\u2139 Methodology")
+          ),
+          div(class = "sidebar-section",
+              style = "margin-top: auto;",
+              downloadButton("download_table", "Download Table (CSV)")
           )
       ),
       
@@ -347,8 +356,6 @@ ui <- fluidPage(
               h3(textOutput("selection_status")),
               uiOutput("partners_panel"),
               hr(),
-              downloadButton("download_table", "Download Table (CSV)"),
-              br(), br(),
               DTOutput("dependency_table")
           )
       )
@@ -672,15 +679,6 @@ server <- function(input, output, session) {
     }
   })
   
-  ## -----------------------------------------------------------------------
-  ## Dynamic sector chart:
-  ## - bars = total dependent products by sector for country 1 (the
-  ##   Importer if dep_direction == "import", the Exporter if "export")
-  ## - each bar is split between "country 2 is the dominant partner
-  ##   (>50% of bilateral trade value)" and "other", using the same
-  ##   bilateral-dominance rule as the partners panel / table.
-  ## -----------------------------------------------------------------------
-  
   sector_chart_data <- reactive({
     selection <- selected_countries()
     req(length(selection) >= 1)
@@ -710,8 +708,6 @@ server <- function(input, output, session) {
     
     if (nrow(base) == 0) return(NULL)
     
-    # one row per hs6 (collapse the multiple partner rows first, so a
-    # product isn't double counted across partners)
     dominant_by_hs6 <- base |>
       group_by(hs6) |>
       summarise(is_dominant = any(is_dominant), .groups = "drop")
@@ -749,7 +745,7 @@ server <- function(input, output, session) {
       mutate(n_other = n_dep - n_dominant) |>
       select(Sector_Name, n_dep, n_dominant, n_other) |>
       pivot_longer(cols = c(n_dominant, n_other), names_to = "category", values_to = "n") |>
-      mutate(category = if_else(category == "n_dominant", dominant_label, "Other / no dominant partner"))
+      mutate(category = if_else(category == "n_dominant", dominant_label, "Other"))
     
     sector_order <- df |> arrange(n_dep) |> pull(Sector_Name)
     df_long <- df_long |> mutate(Sector_Name = factor(Sector_Name, levels = sector_order))
@@ -777,9 +773,9 @@ server <- function(input, output, session) {
     
     if (!is.na(iso2)) {
       p <- p + scale_fill_manual(values = setNames(c("#e31a1c", "#4a86c9"),
-                                                   c(dominant_label, "Other / no dominant partner")))
+                                                   c(dominant_label, "Other")))
     } else {
-      p <- p + scale_fill_manual(values = c("Other / no dominant partner" = "#4a86c9"), guide = "none")
+      p <- p + scale_fill_manual(values = c("Other" = "#4a86c9"), guide = "none")
     }
     
     p
