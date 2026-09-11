@@ -345,7 +345,10 @@ ui <- fluidPage(
           ),
           div(class = "sidebar-section",
               style = "margin-top: auto;",
-              downloadButton("download_table", "Download Table (CSV)")
+              conditionalPanel(
+                condition = "input.importer_select !== ''",
+                downloadButton("download_table", "Download Table (CSV)")
+              )
           )
       ),
       
@@ -525,8 +528,75 @@ server <- function(input, output, session) {
     full_join(import_top3, export_top3, by = "iso_plot")
   }) |> bindCache(input$sector_filter)
   
+  partner_map_data <- reactive({
+    selection <- selected_countries()
+    req(length(selection) >= 1)
+    iso1 <- selection[1]
+    
+    if (input$dep_direction == "import") {
+      base       <- dep_import_base |> filter(iso_d == iso1)
+      partner_col <- "iso_o"
+      total_col   <- "import_dpt"
+      value_col   <- "imports"
+    } else {
+      base       <- dep_export_base |> filter(iso_o == iso1)
+      partner_col <- "iso_d"
+      total_col   <- "export_opt"
+      value_col   <- "imports"
+    }
+    
+    if (input$sector_filter != "all") {
+      base <- base |> filter(.data[[input$sector_filter]] == 1)
+    }
+    
+    if (nrow(base) == 0) return(NULL)
+    
+    base <- base |> rename(partner_iso = all_of(partner_col))
+    
+    totals <- base |>
+      distinct(hs6, .data[[total_col]]) |>
+      summarise(total_value = sum(.data[[total_col]], na.rm = TRUE), n_products = n())
+    
+    base |>
+      group_by(hs6) |>
+      mutate(partner_share = .data[[value_col]] / .data[[total_col]]) |>
+      ungroup() |>
+      group_by(partner_iso) |>
+      summarise(
+        supply_value = sum(.data[[value_col]], na.rm = TRUE),
+        n_dominant   = n_distinct(hs6[partner_share > 0.5]),
+        .groups      = "drop"
+      ) |>
+      mutate(
+        iso_plot    = partner_iso,
+        n_dep       = n_dominant,
+        n_total     = totals$n_products,
+        dep_value   = supply_value,
+        total_value = totals$total_value,
+        count_share = 100 * n_dominant / totals$n_products,
+        value_share = 100 * supply_value / totals$total_value
+      ) |>
+      select(iso_plot, count_share, value_share, n_dep, n_total, dep_value, total_value)
+  })
+  
+  active_map_data <- reactive({
+    sel <- selected_countries()
+    if (length(sel) == 0) {
+      sector_map_data()
+    } else {
+      data <- partner_map_data()
+      if (is.null(data)) {
+        data <- tibble(
+          iso_plot = character(), count_share = double(), value_share = double(),
+          n_dep = double(), n_total = double(), dep_value = double(), total_value = double()
+        )
+      }
+      data
+    }
+  })
+  
   sector_map_sf <- reactive({
-    counts <- sector_map_data()
+    counts <- active_map_data()
     
     world_polygons |>
       mutate(iso_plot = to_eun(iso_a3)) |>
@@ -556,12 +626,25 @@ server <- function(input, output, session) {
     metric <- input$map_metric
     sel    <- selected_countries()
     direction_label <- if (input$dep_direction == "import") "import" else "export"
+    partner_role    <- if (input$dep_direction == "import") "supplier" else "buyer"
     
-    fill_values  <- if (metric == "count") map_sf$count_share else map_sf$value_share
-    metric_label <- if (metric == "count") {
-      paste0("Share of products dependent (", direction_label, "s)")
+    fill_values <- if (metric == "count") map_sf$count_share else map_sf$value_share
+    
+    if (length(sel) >= 1) {
+      iso1_label <- iso_display_name(sel[1])
+      metric_label <- if (metric == "count") {
+        paste0("Share of ", iso1_label, "'s dependent ", direction_label,
+               "s led by each ", partner_role)
+      } else {
+        paste0("Share of ", iso1_label, "'s dependent ", direction_label,
+               " trade value by ", partner_role)
+      }
     } else {
-      paste0("Share of trade value dependent (", direction_label, "s)")
+      metric_label <- if (metric == "count") {
+        paste0("Share of products dependent (", direction_label, "s)")
+      } else {
+        paste0("Share of trade value dependent (", direction_label, "s)")
+      }
     }
     
     pal <- colorNumeric(
@@ -571,24 +654,19 @@ server <- function(input, output, session) {
       na.color = "lightgrey"
     )
     
-    show_hover <- length(sel) == 0
-    
-    label_arg <- NULL
-    if (show_hover) {
-      label_text <- with(map_sf, {
-        header <- if_else(iso_plot == "EUN", "European Union (EU-27)", name)
-        detail <- if (metric == "count") {
-          paste0(
-            ifelse(is.na(count_share), "0%", paste0(round(count_share, 1), "%")),
-            " (", ifelse(is.na(n_dep), 0, n_dep), " of ", ifelse(is.na(n_total), 0, n_total), " products)"
-          )
-        } else {
-          paste0(ifelse(is.na(value_share), "0%", paste0(round(value_share, 1), "%")), " of trade value")
-        }
-        paste0("<strong>", header, "</strong><br/>", metric_label, ": ", detail)
-      })
-      label_arg <- lapply(label_text, HTML)
-    }
+    label_text <- with(map_sf, {
+      header <- if_else(iso_plot == "EUN", "European Union (EU-27)", name)
+      detail <- if (metric == "count") {
+        paste0(
+          ifelse(is.na(count_share), "0%", paste0(round(count_share, 1), "%")),
+          " (", ifelse(is.na(n_dep), 0, n_dep), " of ", ifelse(is.na(n_total), 0, n_total), " products)"
+        )
+      } else {
+        paste0(ifelse(is.na(value_share), "0%", paste0(round(value_share, 1), "%")), " of trade value")
+      }
+      paste0("<strong>", header, "</strong><br/>", metric_label, ": ", detail)
+    })
+    label_arg <- lapply(label_text, HTML)
     
     proxy <- leafletProxy("dependency_map", data = map_sf) |>
       clearShapes() |>
@@ -672,12 +750,14 @@ server <- function(input, output, session) {
     if (length(selection) == 0) {
       return(paste("Status: No countries selected. Sector filter:", sector_label))
     } else if (length(selection) == 1) {
-      return(paste("Status: Importer (Destination) selected as", iso_display_name(selection[1]), "- Please select Exporter."))
+      return(paste("Status: Showing", sector_label, "dependent products for",
+                   iso_display_name(selection[1]), "- Select an Exporter to see bilateral detail."))
     } else {
       return(paste("Status: Showing", sector_label, "dependencies for Importer:",
                    iso_display_name(selection[1]), "and Exporter:", iso_display_name(selection[2])))
     }
   })
+  
   
   sector_chart_data <- reactive({
     selection <- selected_countries()
@@ -784,7 +864,24 @@ server <- function(input, output, session) {
   output$sector_chart <- renderPlot({
     make_sector_chart()
   })
-  
+  output$download_plot <- downloadHandler(
+    filename = function() {
+      selection <- selected_countries()
+      req(length(selection) >= 1)
+      iso1 <- selection[1]
+      iso2 <- if (length(selection) >= 2) paste0("_", selection[2]) else ""
+      direction <- input$dep_direction
+      paste0("sector_chart_", direction, "_", iso1, iso2, "_2024.png")
+    },
+    content = function(file) {
+
+      p <- make_sector_chart()
+      req(p)
+
+      ggsave(filename = file, plot = p, device = "png", 
+             width = 10, height = 6, dpi = 300, bg = "white")
+    }
+  )
   output$partners_panel <- renderUI({
     selection <- selected_countries()
     if (length(selection) == 0) return(NULL)
@@ -817,46 +914,97 @@ server <- function(input, output, session) {
     
     tagList(
       cards,
-      plotOutput("sector_chart", height = "320px")
+      plotOutput("sector_chart", height = "320px"),
+      div(style = "text-align: right; margin-top: 10px;",
+          downloadButton("download_plot", "Download Graph (PNG)", 
+                         style = "background-color: #6c7a76; color: white; border: none;")
+      )
     )
   })
   
   filtered_dependency_data <- reactive({
     selection <- selected_countries()
-    req(length(selection) == 2)
+    req(length(selection) >= 1)
     
-    destination <- selection[1]
-    origin <- selection[2]
-    
-    result <- dep_import_base |>
-      filter(iso_d == destination, iso_o == origin) |>
-      group_by(hs6) |>
-      mutate(origin_share = imports / import_dpt) |>
-      ungroup() |>
-      filter(origin_share > 0.5)
-    
-    if (input$sector_filter != "all") {
+    if (length(selection) == 2) {
+      destination <- selection[1]
+      origin <- selection[2]
+      
+      result <- dep_import_base |>
+        filter(iso_d == destination, iso_o == origin) |>
+        group_by(hs6) |>
+        mutate(origin_share = imports / import_dpt) |>
+        ungroup() |>
+        filter(origin_share > 0.5)
+      
+      if (input$sector_filter != "all") {
+        result <- result |>
+          filter(.data[[input$sector_filter]] == 1)
+      }
+      
       result <- result |>
-        filter(.data[[input$sector_filter]] == 1)
+        mutate(share_odpt = origin_share * 100) |>
+        select(
+          `HS6 Product` = hs6,
+          `Description` = Description,
+          `Total Imports (World, k$)` = import_dpt,
+          `Imports from Origin (k$)` = imports,
+          `Share from Origin (%)` = share_odpt,
+          starts_with("sect_")
+        ) |>
+        arrange(desc(`Imports from Origin (k$)`))
+      
+      return(result)
+    }
+
+    iso1 <- selection[1]
+    
+    if (input$dep_direction == "import") {
+      base        <- dep_import_base |> filter(iso_d == iso1)
+      total_col   <- "import_dpt"
+      total_label <- "Total Imports (World, k$)"
+    } else {
+      base        <- dep_export_base |> filter(iso_o == iso1)
+      total_col   <- "export_opt"
+      total_label <- "Total Exports (World, k$)"
     }
     
-    result |>
-      mutate(share_odpt = origin_share * 100) |>
-      select(
-        `HS6 Product` = hs6,
-        `Description` = Description,
-        `Total Imports (World, k$)` = import_dpt,
-        `Imports from Origin (k$)` = imports,
-        `Share from Origin (%)` = share_odpt,
-        starts_with("sect_")
-      ) |>
-      arrange(desc(`Imports from Origin (k$)`))
+    if (input$sector_filter != "all") {
+      base <- base |> filter(.data[[input$sector_filter]] == 1)
+    }
+    
+    result <- base |>
+      distinct(hs6, Description, .data[[total_col]], across(starts_with("sect_"))) |>
+      arrange(desc(.data[[total_col]]))
+    
+    colnames(result)[colnames(result) == "hs6"]     <- "HS6 Product"
+    colnames(result)[colnames(result) == total_col] <- total_label
+    
+    result
   })
   
   output$dependency_table <- renderDT({
     data <- filtered_dependency_data()
     
-    datatable(
+    value_cols <- intersect(
+      c("Total Imports (World, k$)", "Total Exports (World, k$)", "Imports from Origin (k$)"),
+      colnames(data)
+    )
+    share_col <- intersect("Share from Origin (%)", colnames(data))
+    
+    order_col <- if ("Imports from Origin (k$)" %in% colnames(data)) {
+      "Imports from Origin (k$)"
+    } else {
+      value_cols[1]
+    }
+    
+    empty_msg <- if (length(selected_countries()) == 2) {
+      "No product where the importer is dependent and this exporter is the dominant supplier (>50%)."
+    } else {
+      "No dependent products found for this selection."
+    }
+    
+    dt <- datatable(
       data,
       rownames  = FALSE,
       selection = "none",
@@ -867,19 +1015,24 @@ server <- function(input, output, session) {
           lengthMenu  = "Show _MENU_ entries",
           info        = "Showing _START_ to _END_ of _TOTAL_ entries",
           paginate    = list(previous = "Previous", `next` = "Next"),
-          emptyTable  = "No product where the importer is dependent and this exporter is the dominant supplier (>50%)."
+          emptyTable  = empty_msg
         ),
-        order = list(list(which(colnames(data) == "Imports from Origin (k$)") - 1, "desc"))
+        order = list(list(which(colnames(data) == order_col) - 1, "desc"))
       )
     ) |>
       formatCurrency(
-        columns  = c("Total Imports (World, k$)", "Imports from Origin (k$)"),
+        columns  = value_cols,
         currency = "",
         interval = 3,
         mark     = ".",
         digits   = 0
-      ) |>
-      formatRound(columns = "Share from Origin (%)", digits = 1)
+      )
+    
+    if (length(share_col) == 1) {
+      dt <- dt |> formatRound(columns = share_col, digits = 1)
+    }
+    
+    dt
   })
   
   output$download_table <- downloadHandler(
@@ -887,6 +1040,9 @@ server <- function(input, output, session) {
       selection <- selected_countries()
       if (length(selection) == 2) {
         paste0("dependencies_", selection[1], "_from_", selection[2], "_",
+               Sys.Date(), ".csv")
+      } else if (length(selection) == 1) {
+        paste0("dependencies_", selection[1], "_", input$dep_direction, "_",
                Sys.Date(), ".csv")
       } else {
         paste0("dependencies_", Sys.Date(), ".csv")
