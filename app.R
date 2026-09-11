@@ -356,7 +356,6 @@ ui <- fluidPage(
           leafletOutput("dependency_map", height = "650px"),
           
           div(class = "section-block",
-              h3(textOutput("selection_status")),
               uiOutput("partners_panel"),
               hr(),
               DTOutput("dependency_table")
@@ -740,21 +739,6 @@ server <- function(input, output, session) {
     current_selection <- selected_countries()
     if (length(current_selection) == 2) {
       selected_countries(rev(current_selection))
-    }
-  })
-  
-  output$selection_status <- renderText({
-    selection <- selected_countries()
-    sector_label <- names(sector_choices)[sector_choices == input$sector_filter]
-    
-    if (length(selection) == 0) {
-      return(paste("Status: No countries selected. Sector filter:", sector_label))
-    } else if (length(selection) == 1) {
-      return(paste("Status: Showing", sector_label, "dependent products for",
-                   iso_display_name(selection[1]), "- Select an Exporter to see bilateral detail."))
-    } else {
-      return(paste("Status: Showing", sector_label, "dependencies for Importer:",
-                   iso_display_name(selection[1]), "and Exporter:", iso_display_name(selection[2])))
     }
   })
   
