@@ -39,7 +39,10 @@ colnames(hs6_description)[2] <- "hs6"
 ```{r}
 imports_final <- read_dta("1_Data/geodep_M_hs22.dta") |>
   filter(year == DEP_YEAR) |>
-  left_join(hs6_description, by = "hs6")
+  left_join(hs6_description, by = "hs6") |>
+  select(-Classification,-`Parent Code`, -Level,-IsBasicLevel) |>
+  mutate(sect_strategic = if_else(sect_crm == 1 | sect_dual_use == 1 | sect_health == 1 | sect_agrifood == 1 | sect_energy == 1, 1, 0)
+    )
 ```
 
 `GeoDep_M.dta` is one row per (importer, HS6): it carries the destination's

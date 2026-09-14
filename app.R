@@ -1200,6 +1200,7 @@ server <- function(input, output, session) {
     }
   )
   
+  
   output$download_full <- downloadHandler(
     filename = function() {
       prefix <- if (input$dep_direction == "import") "GeoDep_M" else "GeoDep_X"
