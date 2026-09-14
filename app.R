@@ -507,9 +507,9 @@ server <- function(input, output, session) {
       p("The same four criteria, applied symmetrically, define ", tags$strong("export-dependent"),
         " products: import concentration and world import concentration replace the export-side equivalents, and the roles of imports and exports are reversed in the non-substitutability ratio. Use the \u201cShow dependencies for\u201d toggle above the map to switch between the two views."),
       p("On the map, exposure is shown either as the share of traded HS6 products for which the country is dependent (\u201cShare of products\u201d), or as the share of its total trade value concentrated in those dependent products (\u201cShare of trade value\u201d)."),
-      p("When an Importer and an Exporter are both selected, the partner panels list their top-3 ",
-        tags$em("bilateral"), " dependency partners \u2014 an additional, stricter criterion applied on top of the four above: for the Importer, the exporters supplying more than 50% of a given dependent product's import value; for the Exporter, the destinations absorbing more than 50% of a given dependent product's export value."),
-      p("Sector groupings in this app (Critical Raw Materials, Dual Use, Health, Agrifood, Energy, Other) come from dedicated reference lists (UNCTAD, EU dual-use regulation, CEPII health nomenclature, FAO, World Bank); \u201cStrategic Sector\u201d groups all products in any of these five sectors together, and is not identical to the broader set of \u201cstrategic sectors\u201d (based on the EU's strategic ecosystems) used in the CEPII policy brief."),
+      p("When an Importer and an Exporter are both selected, the partner panels show their ",
+        tags$em("leading"), " dependency partner \u2014 for the Importer, the exporter supplying the largest share of a given dependent product's import value; for the Exporter, the destination absorbing the largest share of a given dependent product's export value."),
+      p("Sector groupings (Critical Raw Materials, Dual Use, Health, Agrifood, Energy, Other) come from dedicated reference lists (UNCTAD, EU dual-use regulation, CEPII health nomenclature, FAO, World Bank) and are only available for ", tags$strong("Import"), " dependencies (GeoDep_M); Export dependencies (GeoDep_X) are not sector-tagged."),
       p("Figures reflect 2024 (the only year for which the dependency indicators are available in this dataset) and EU-27 member states are aggregated into a single entity (EUN)."),
       easyClose = TRUE,
       footer = modalButton("Close")
@@ -573,7 +573,10 @@ server <- function(input, output, session) {
         rename(iso_plot = iso_o, dep1 = dependant_X_MC_t, dep2 = c4_X_MC, val = export_opt)
     }
     
-    if (input$sector_filter != "all") {
+    ## Sector columns only exist for the Import table (GeoDep_M); the sector
+    ## dropdown is locked to "all" while on Export, so this branch is a no-op
+    ## for exports in practice, but the guard is kept for safety.
+    if (input$sector_filter != "all" && input$sector_filter %in% names(base)) {
       base <- base |> filter(.data[[input$sector_filter]] == 1)
     }
     
@@ -599,14 +602,23 @@ server <- function(input, output, session) {
       select(iso_plot, count_share, value_share, n_dep, n_total, dep_value, total_value)
   }) |> bindCache(input$sector_filter, input$dep_direction)
   
+  ## -----------------------------------------------------------------------
+  ## hover_data: shows, per country, the countries that most often appear as
+  ## the LEADING import/export partner across its dependent products.
+  ## NOTE: dep_import_base / dep_export_base now hold a single (leading)
+  ## partner per (country, hs6) - there is no longer a full bilateral matrix
+  ## to rank "top 3" partners from, so this now surfaces the countries that
+  ## are the leading partner most often. The sector filter only applies to
+  ## the Import side, since GeoDep_X carries no sect_* columns.
+  ## -----------------------------------------------------------------------
   hover_data <- reactive({
     import_base <- dep_import_base
     export_base <- dep_export_base
     
-    if (input$sector_filter != "all") {
+    if (input$sector_filter != "all" && input$sector_filter %in% names(import_base)) {
       import_base <- import_base |> filter(.data[[input$sector_filter]] == 1)
-      export_base <- export_base |> filter(.data[[input$sector_filter]] == 1)
     }
+    # export_base has no sect_* columns in the GeoDep_X data model - no sector filtering applied
     
     import_top3 <- import_base |>
       group_by(iso_d, hs6) |>
@@ -656,7 +668,7 @@ server <- function(input, output, session) {
       value_col   <- "imports"
     }
     
-    if (input$sector_filter != "all") {
+    if (input$sector_filter != "all" && input$sector_filter %in% names(base)) {
       base <- base |> filter(.data[[input$sector_filter]] == 1)
     }
     
@@ -855,9 +867,15 @@ server <- function(input, output, session) {
   })
   
   
+  ## -----------------------------------------------------------------------
+  ## sector_chart_data / make_sector_chart: sector breakdown chart.
+  ## Only meaningful for Imports (GeoDep_M carries sect_* columns; GeoDep_X
+  ## does not). Returns NULL for Exports so the UI can show a note instead.
+  ## -----------------------------------------------------------------------
   sector_chart_data <- reactive({
     selection <- selected_countries()
     req(length(selection) >= 1)
+    req(input$dep_direction == "import")
     
     iso1 <- selection[1]
     iso2 <- if (length(selection) >= 2) selection[2] else NA_character_
@@ -866,21 +884,12 @@ server <- function(input, output, session) {
     sector_cols <- setdiff(unlist(sector_choices_ui, use.names = FALSE),
                            c("all", "sect_strategic"))
     
-    if (input$dep_direction == "import") {
-      base <- dep_import_base |>
-        filter(iso_d == iso1) |>
-        group_by(hs6) |>
-        mutate(partner_share = imports / import_dpt) |>
-        ungroup() |>
-        mutate(is_dominant = !is.na(iso2) & iso_o == iso2 & partner_share > 0.5)
-    } else {
-      base <- dep_export_base |>
-        filter(iso_o == iso1) |>
-        group_by(hs6) |>
-        mutate(partner_share = imports / export_opt) |>
-        ungroup() |>
-        mutate(is_dominant = !is.na(iso2) & iso_d == iso2 & partner_share > 0.5)
-    }
+    base <- dep_import_base |>
+      filter(iso_d == iso1) |>
+      group_by(hs6) |>
+      mutate(partner_share = imports / import_dpt) |>
+      ungroup() |>
+      mutate(is_dominant = !is.na(iso2) & iso_o == iso2 & partner_share > 0.5)
     
     if (nrow(base) == 0) return(NULL)
     
@@ -906,14 +915,16 @@ server <- function(input, output, session) {
   })
   
   make_sector_chart <- function() {
+    if (input$dep_direction != "import") return(NULL)
+    
     df <- sector_chart_data()
     if (is.null(df) || nrow(df) == 0) return(NULL)
     
     selection <- selected_countries()
     iso1 <- selection[1]
     iso2 <- if (length(selection) >= 2) selection[2] else NA_character_
-    direction_label <- if (input$dep_direction == "import") "exporter" else "importer"
-    flow_label       <- if (input$dep_direction == "import") "Import" else "Export"
+    direction_label <- "exporter"
+    flow_label       <- "Import"
     
     dominant_label <- if (!is.na(iso2)) paste0("Dominant: ", iso_display_name(iso2)) else "Other"
     
@@ -978,6 +989,7 @@ server <- function(input, output, session) {
              width = 10, height = 6, dpi = 300, bg = "white")
     }
   )
+  
   output$partners_panel <- renderUI({
     selection <- selected_countries()
     if (length(selection) == 0) return(NULL)
@@ -992,9 +1004,9 @@ server <- function(input, output, session) {
       
       wellPanel(
         h4(iso_display_name(iso)),
-        tags$p(tags$em("Depends on for imports (top 3 exporters to it):")),
+        tags$p(tags$em("Depends on for imports (top exporters to it):")),
         tags$p(import_txt),
-        tags$p(tags$em("Depends on for exports (top 3 destinations):")),
+        tags$p(tags$em("Depends on for exports (top destinations):")),
         tags$p(export_txt)
       )
     }
@@ -1008,16 +1020,31 @@ server <- function(input, output, session) {
       )
     }
     
-    tagList(
-      cards,
-      plotOutput("sector_chart", height = "320px"),
-      div(style = "text-align: right; margin-top: 10px;",
-          downloadButton("download_plot", "Download Graph (PNG)", 
-                         style = "background-color: #6c7a76; color: white; border: none;")
+    ## Sector breakdown chart is only available for Imports (GeoDep_X carries
+    ## no sect_* columns); show an explanatory note instead for Exports.
+    chart_block <- if (input$dep_direction == "import") {
+      tagList(
+        plotOutput("sector_chart", height = "320px"),
+        div(style = "text-align: right; margin-top: 10px;",
+            downloadButton("download_plot", "Download Graph (PNG)", 
+                           style = "background-color: #6c7a76; color: white; border: none;")
+        )
       )
-    )
+    } else {
+      div(
+        style = "padding: 14px 18px; background-color: #f4f8f6; border: 1px solid #cfe0da; border-left: 5px solid #8b3a3a; border-radius: 4px; color: #666; font-style: italic;",
+        "Sector breakdown is only available for Import dependencies (GeoDep_M). Export dependencies (GeoDep_X) are not sector-tagged."
+      )
+    }
+    
+    tagList(cards, chart_block)
   })
   
+  ## -----------------------------------------------------------------------
+  ## filtered_dependency_data: table shown below the map / downloaded as CSV.
+  ## Column set is built dynamically since GeoDep_X (exports) has neither a
+  ## Description column nor sect_* columns, unlike GeoDep_M (imports).
+  ## -----------------------------------------------------------------------
   filtered_dependency_data <- reactive({
     selection <- selected_countries()
     req(length(selection) >= 1)
@@ -1065,12 +1092,19 @@ server <- function(input, output, session) {
       total_label <- "Total Exports (World, k$)"
     }
     
-    if (input$sector_filter != "all") {
+    if (input$sector_filter != "all" && input$sector_filter %in% names(base)) {
       base <- base |> filter(.data[[input$sector_filter]] == 1)
     }
     
+    ## Only include Description / sect_* columns if they actually exist in
+    ## `base` (true for imports, absent for exports).
+    optional_cols <- intersect(
+      c("Description", grep("^sect_", names(base), value = TRUE)),
+      names(base)
+    )
+    
     result <- base |>
-      distinct(hs6, Description, .data[[total_col]], across(starts_with("sect_"))) |>
+      distinct(across(all_of(c("hs6", total_col, optional_cols)))) |>
       arrange(desc(.data[[total_col]]))
     
     colnames(result)[colnames(result) == "hs6"]     <- "HS6 Product"

@@ -27,86 +27,37 @@ here::i_am('geodep_shiny.Rproj')
 DEP_YEAR <- 2024  
 ```
 
-## 0. Reference / sector lists
+## 0. HS6 product descriptions
 
 ```{r}
-CRM_UNCTAD    <- read_excel("1_Data/1_CRM_UNCTAd_final.xlsx")
-Dual_use_EU   <- read_excel("1_Data/2_Dual_use_EU_final.xlsx")
-Health_CEPII  <- read_excel("1_Data/3_health_product_nomenclature_final.xlsx")
-Fertilisers_FAO <- read_excel("1_Data/4_Fertilisants_FAO_final.xlsx")
-Agrifood_WB   <- read_excel("1_Data/5_Agrifood_World_Bank_final.xlsx")
-Energy_ECT    <- read_excel("1_Data/6_Energy_ECt_final.xlsx")
-```
-
-## 1. Imports
-
-```{r}
-## 1. Imports
-
-imports_hs22 <- read_dta("1_Data/imports_hs22.dta")
-
-base_data <- imports_hs22 |>
-  filter(!is.na(hs6) & hs6 != "", year == DEP_YEAR, iso_o != iso_d)
-
-rm(imports_hs22); gc()
-
-imports_final <- read_dta("1_Data/data_dep_M_hs22.dta") |>
-  filter(year == DEP_YEAR)
-
 hs6_description <- read_excel("1_Data/hs22_hs6.xlsx")
 colnames(hs6_description)[2] <- "hs6"
-
-imports_final <- imports_final |>
-  left_join(hs6_description, by = "hs6") |>
-  mutate(
-    sect_strategic = if_else(sect_crm == 1 | sect_dual_use == 1 | sect_health == 1 |
-                             sect_agrifood == 1 | sect_energy == 1, 1, 0)
-  )
 ```
 
-## 2. Exports
+## 1. Imports (GeoDep_M)
 
 ```{r}
-exports_final <- read_dta("1_Data/data_dep_X_hs22.dta") |>
-  filter(year == DEP_YEAR)
-
-prep_sector <- function(df, col_name) {
-  if ("code_hs6_kept" %in% names(df)) {
-    df |>
-      select(hs6 = code_hs6_kept) |>
-      mutate(hs6 = str_trim(as.character(hs6))) |>
-      filter(!is.na(hs6) & hs6 != "" & hs6 != ".") |>
-      distinct() |>
-      mutate(!!col_name := 1)
-  } else {
-    tibble(hs6 = character(), !!col_name := numeric())
-  }
-}
-
-crm_hs6    <- prep_sector(CRM_UNCTAD, "sect_crm")
-dual_hs6   <- prep_sector(Dual_use_EU, "sect_dual_use")
-health_hs6 <- prep_sector(Health_CEPII, "sect_health")
-fert_hs6   <- prep_sector(Fertilisers_FAO, "sect_fert_temp")
-agri_hs6   <- prep_sector(Agrifood_WB, "sect_agri_temp")
-energy_hs6 <- prep_sector(Energy_ECT, "sect_energy")
-
-exports_final <- exports_final |>
-  left_join(crm_hs6, by = "hs6") |>
-  left_join(dual_hs6, by = "hs6") |>
-  left_join(health_hs6, by = "hs6") |>
-  left_join(fert_hs6, by = "hs6") |>
-  left_join(agri_hs6, by = "hs6") |>
-  left_join(energy_hs6, by = "hs6") |>
-  mutate(across(starts_with("sect_"), ~replace_na(.x, 0))) |>
-  mutate(
-    sect_agrifood = if_else(sect_fert_temp == 1 | sect_agri_temp == 1, 1, 0),
-    sect_other = if_else(sect_agrifood == 0 & sect_crm == 0 & sect_health == 0 &
-                         sect_energy == 0 & sect_dual_use == 0, 1, 0),
-    sect_strategic = if_else(sect_crm == 1 | sect_dual_use == 1 | sect_health == 1 |
-                             sect_agrifood == 1 | sect_energy == 1, 1, 0)
-  ) |>
-  select(-sect_fert_temp, -sect_agri_temp)
+imports_final <- read_dta("1_Data/geodep_M_hs22.dta") |>
+  filter(year == DEP_YEAR) |>
+  left_join(hs6_description, by = "hs6")
 ```
+
+`GeoDep_M.dta` is one row per (importer, HS6): it carries the destination's
+total import value (`import_dpt`), the four dependency criteria (`c1_M`
+to `c4_M`), the `dependent` flag, the identity/share of the *leading*
+supplier (`first_odpt`, `share_odpt`), and the `sect_*` flags.
+
+## 2. Exports (GeoDep_X)
+
+```{r}
+exports_final <- read_dta("1_Data/geodep_X_hs22.dta") |>
+  filter(year == DEP_YEAR)
+```
+
+`GeoDep_X.dta` is the symmetric export-side table: one row per (exporter,
+HS6), with `export_opt`, `c1_X` to `c4_X`, `dependent`, and the leading
+destination's identity/share (`first_dpto`, `share_dpto`). No sector
+columns.
 
 ## 3. Descriptive-stats precomputation
 
@@ -122,13 +73,11 @@ sector_names <- c(
   "sect_health" = "Health",
   "sect_agrifood" = "Agrifood",
   "sect_energy" = "Energy",
-  "sect_other" = "Other",
-  "sect_strategic" = "Strategic Sector"
+  "sect_other" = "Other"
 )
 
 sector_choices <- c(
   "All Sectors"             = "all",
-  "Strategic Sector"        = "sect_strategic",
   "Critical Raw Materials"  = "sect_crm",
   "Dual Use"                = "sect_dual_use",
   "Health"                  = "sect_health",
@@ -180,37 +129,38 @@ country_choices <- setNames(country_choices_lookup$iso_a3, country_choices_looku
 country_choices <- country_choices[order(names(country_choices))]
 country_choices_ui <- c("Select a country..." = "", country_choices)
 
-dep_import_base <- base_data |>
-  mutate(iso_d = to_eun(iso_d), iso_o = to_eun(iso_o)) |>
-  inner_join(
-    imports_final |> mutate(iso_d = to_eun(iso_d)),
-    by = c("iso_d", "hs6", "year")
+dep_import_base <- imports_final |>
+  filter(dependent == 1) |>
+  mutate(
+    iso_d   = to_eun(iso_d),
+    iso_o   = to_eun(first_odpt),
+    imports = import_dpt * share_odpt / 100
   ) |>
-  filter(dependant_M_MC_t == 1, c4_M_MC == 1) |>
   select(iso_d, iso_o, hs6, imports, import_dpt,
          Description, starts_with("sect_"))
 
-dep_export_base <- base_data |>
-  mutate(iso_o = to_eun(iso_o), iso_d = to_eun(iso_d)) |>
-  inner_join(
-    exports_final |> mutate(iso_o = to_eun(iso_o)),
-    by = c("iso_o", "hs6", "year")
+dep_export_base <- exports_final |>
+  filter(dependent == 1) |>
+  mutate(
+    iso_o   = to_eun(iso_o),
+    iso_d   = to_eun(first_dpto),
+    imports = export_opt * share_dpto / 100   # kept as "imports" to match app's shared column name
   ) |>
-  filter(dependant_X_MC_t == 1, c4_X_MC == 1) |>
-  select(iso_o, iso_d, hs6, imports, export_opt,
-         starts_with("sect_"))
+  select(iso_o, iso_d, hs6, imports, export_opt)
 
 traded_by_country <- imports_final |>
   mutate(iso_d = to_eun(iso_d)) |>
-  select(iso_d, hs6, dependant_M_MC_t, c4_M_MC, import_dpt, starts_with("sect_"))
+  select(iso_d, hs6, dependant_M_MC_t = dependent, c4_M_MC = c4_M,
+         import_dpt, starts_with("sect_"))
 
 traded_by_country_export <- exports_final |>
   mutate(iso_o = to_eun(iso_o)) |>
-  select(iso_o, hs6, dependant_X_MC_t, c4_X_MC, export_opt, starts_with("sect_"))
+  select(iso_o, hs6, dependant_X_MC_t = dependent, c4_X_MC = c4_X,
+         export_opt)
 
 imports_sector_long_all <- imports_final |>
   mutate(iso_d = to_eun(iso_d)) |>
-  mutate(dep_all = if_else(dependant_M_MC_t == 1 & c4_M_MC == 1, 1, 0)) |>
+  mutate(dep_all = dependent) |>
   select(iso_d, hs6, dep_all, starts_with("sect_")) |>
   pivot_longer(cols = starts_with("sect_"), names_to = "Sector", values_to = "is_in_sector") |>
   filter(is_in_sector == 1) |>
@@ -233,7 +183,9 @@ geodep_inputs <- list(
   dep_export_base                          = dep_export_base,
   traded_by_country                          = traded_by_country,
   traded_by_country_export                     = traded_by_country_export,
-  imports_sector_long_all                        = imports_sector_long_all
+  imports_sector_long_all                        = imports_sector_long_all,
+  imports_final = imports_final,
+  exports_final = exports_final
 )
 
 saveRDS(geodep_inputs, "1_Data/geodep_shiny_inputs.rds")
