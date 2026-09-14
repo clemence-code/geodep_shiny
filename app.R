@@ -12,6 +12,7 @@ library(htmltools)
 library(DT)
 library(sf)
 library(readr)
+library(zip)
 
 here::i_am('geodep_shiny.Rproj')
 
@@ -67,6 +68,114 @@ iso_display_name <- function(iso3) {
 iso_name <- function(iso3) {
   matched <- iso_name_lookup$name[match(iso3, iso_name_lookup$iso_a3)]
   ifelse(is.na(matched), iso3, matched)
+}
+
+## -----------------------------------------------------------------------
+## Helper: build README text for the zip download
+## -----------------------------------------------------------------------
+generate_readme <- function(direction, selection, sector_filter, map_metric,
+                            zip_filename, is_full = FALSE) {
+  
+  is_import <- direction == "import"
+  
+  if (is_full) {
+    selection_line <- paste0(
+      "Selection used for this extract : FULL DATASET \u2014 no country or sector filter applied",
+      " | Direction = ", if (is_import) "Imports" else "Exports",
+      " | Extraction date = ", Sys.Date()
+    )
+  } else {
+    selection_desc <- if (length(selection) == 2) {
+      paste0("Importer = ", iso_display_name(selection[1]), " (", selection[1], "), ",
+             "Exporter = ", iso_display_name(selection[2]), " (", selection[2], ")")
+    } else if (length(selection) == 1) {
+      paste0(if (is_import) "Importer" else "Exporter", " = ",
+             iso_display_name(selection[1]), " (", selection[1], ")")
+    } else {
+      "No country selected (full table for current filters)"
+    }
+    
+    sector_label <- if (sector_filter == "all") "All Sectors" else sector_filter
+    metric_label <- if (map_metric == "count") "Share of products" else "Share of trade value"
+    
+    selection_line <- paste0(
+      "Selection used for this extract : Direction = ", if (is_import) "Imports" else "Exports",
+      " | ", selection_desc,
+      " | Sector filter = ", sector_label,
+      " | Map metric = ", metric_label,
+      " | Extraction date = ", Sys.Date()
+    )
+  }
+  
+  if (is_import) {
+    header <- paste0(
+      "Name of the dataset : ", zip_filename, "\n",
+      "Format : csv\n",
+      "Delimiter : ,\n\n",
+      "Release Date : \n\n",
+      "Weblink : https://www.cepii.fr/CEPII/fr/bdd_modele/bdd_modele_item.asp?id=41\n\n",
+      "DOI : \n\n",
+      "Size (unzipped) : 75 675 Kilobytes\n\n",
+      "Size (zipped) : \n\n",
+      "Software : this dataset was created using Stata 16\n\n",
+      "Contents: GeoDep provides an assessment of trade dependencies for the year 2024 at the HS6 product level (revision 2022). GeoDep_M assesses import vulnerabilities by measuring concentration, substitutability, and strategic sector categorization (e.g., health, energy, agrifood, dual-use).\n\n",
+      "List of Variables (GeoDep_M - Import Dependencies) :\n",
+      "iso_d -- Importer (ISO 3-digit country code)\n",
+      "hs6 -- Product category (HS6 product rev. 2022)\n",
+      "year -- Year 2024\n",
+      "import_dpt -- Total import value (in thousands current USD) of HS6 product p, to destination d, in year t\n",
+      "c1_M -- Level of concentration of imports\n",
+      "c2_M -- Level of concentration of world exports\n",
+      "c3_M -- Substitutability of exports by domestic supply\n",
+      "c4_M -- Criteria 4: c1 > 0.4 & c2 > 0.4 & c3 > 1 = 2/3 previous years\n",
+      "first_odpt -- ISO code of the leading exporter in total imports of the HS6 product p, to destination d, in year t\n",
+      "share_odpt -- Share of the leading exporter in total imports of the HS6 product p, to destination d, in year t\n",
+      "dependent -- =1 if [c1 > 0.4 & c2 > 0.4 & c3 > 1 & c4 = 1], 0 otherwise\n",
+      "sect_crm -- =1 if the HS6 product belongs to CRM UNCTAD list, 0 otherwise\n",
+      "sect_dual_use -- =1 if the HS6 product belongs to Dual use EU list, 0 otherwise\n",
+      "sect_health -- =1 if the HS6 product belongs to Health nomenclature list, 0 otherwise\n",
+      "sect_energy -- =1 if the HS6 product belongs to Energy ECT list, 0 otherwise\n",
+      "sect_agrifood -- =1 if the HS6 product belongs to Agrifood WB or Fertilisants FAO list, 0 otherwise\n",
+      "sect_other -- =1 if the HS6 product is not strategic\n\n",
+      "Additional useful information : Not applicable\n\n",
+      "Example of 1 line : Not applicable\n\n",
+      "Licence : Creative Commons BY NC SA\n\n",
+      "Reference (Please cite when using this dataset) : \n\n",
+      selection_line, "\n"
+    )
+  } else {
+    header <- paste0(
+      "Name of the dataset : ", zip_filename, "\n",
+      "Format : csv\n",
+      "Delimiter : ,\n\n",
+      "Release Date : \n\n",
+      "Weblink : https://www.cepii.fr/CEPII/fr/bdd_modele/bdd_modele_item.asp?id=41\n\n",
+      "DOI : \n\n",
+      "Size (unzipped) : 39 064 Kilobytes\n\n",
+      "Size (zipped) : \n\n",
+      "Software : this dataset was created using Stata 16\n\n",
+      "Contents: GeoDep provides an assessment of trade dependencies for the year 2024 at the HS6 product level (revision 2022). GeoDep_X assesses export dependencies by measuring market concentration and substitutability by domestic demand.\n\n",
+      "List of Variables (GeoDep_X - Export Dependencies) :\n",
+      "iso_o -- Exporter (ISO 3-digit country code)\n",
+      "hs6 -- Product category (HS6 product rev. 2022)\n",
+      "year -- Year 2024\n",
+      "export_opt -- Total export value (in thousands current USD) of HS6 product p, from origin o, in year t\n",
+      "c1_X -- Level of concentration of exports\n",
+      "c2_X -- Level of concentration of world imports\n",
+      "c3_X -- Substitutability of exports by domestic demand\n",
+      "c4_X -- Criteria 4: c1_X > 0.4 & c2_X > 0.4 & c3_X > 1 = 2/3 previous years\n",
+      "first_dpto -- ISO code of the leading destination in total exports of the HS6 product p, from origin o, in year t\n",
+      "share_dpto -- Share of the leading destination in total exports of the HS6 product p, from origin o, in year t\n",
+      "dependent -- =1 if [c1_X > 0.4 & c2_X > 0.4 & c3_X > 1 & c4_X = 1], 0 otherwise\n\n",
+      "Additional useful information : Not applicable\n\n",
+      "Example of 1 line : Not applicable\n\n",
+      "Licence : Creative Commons BY NC SA\n\n",
+      "Reference (Please cite when using this dataset) : \n\n",
+      selection_line, "\n"
+    )
+  }
+  
+  header
 }
 
 ## -----------------------------------------------------------------------
@@ -347,8 +456,11 @@ ui <- fluidPage(
               style = "margin-top: auto;",
               conditionalPanel(
                 condition = "input.importer_select !== ''",
-                downloadButton("download_table", "Download Table (CSV)")
-              )
+                downloadButton("download_table", "Download selection (ZIP)")
+              ),
+              tags$div(style = "height: 10px;"),
+              downloadButton("download_full", "Download full dataset (ZIP)",
+                             style = "background-color: #1f6f5c; color: white; border: none; width: 100%; display: block; text-align: center;")
           )
       ),
       
@@ -858,10 +970,10 @@ server <- function(input, output, session) {
       paste0("sector_chart_", direction, "_", iso1, iso2, "_2024.png")
     },
     content = function(file) {
-
+      
       p <- make_sector_chart()
       req(p)
-
+      
       ggsave(filename = file, plot = p, device = "png", 
              width = 10, height = 6, dpi = 300, bg = "white")
     }
@@ -940,7 +1052,7 @@ server <- function(input, output, session) {
       
       return(result)
     }
-
+    
     iso1 <- selection[1]
     
     if (input$dep_direction == "import") {
@@ -1022,18 +1134,98 @@ server <- function(input, output, session) {
   output$download_table <- downloadHandler(
     filename = function() {
       selection <- selected_countries()
+      prefix    <- if (input$dep_direction == "import") "GeoDep_M" else "GeoDep_X"
+      
       if (length(selection) == 2) {
-        paste0("dependencies_", selection[1], "_from_", selection[2], "_",
-               Sys.Date(), ".csv")
+        paste0(prefix, "_dependencies_from_", selection[2], "_to_", selection[1], "_",
+               Sys.Date(), ".zip")
       } else if (length(selection) == 1) {
-        paste0("dependencies_", selection[1], "_", input$dep_direction, "_",
-               Sys.Date(), ".csv")
+        paste0(prefix, "_dependencies_", selection[1], "_", input$dep_direction, "_",
+               Sys.Date(), ".zip")
       } else {
-        paste0("dependencies_", Sys.Date(), ".csv")
+        paste0(prefix, "_dependencies_", Sys.Date(), ".zip")
       }
     },
+    contentType = "application/zip",
     content = function(file) {
-      write_excel_csv2(filtered_dependency_data(), file)
+      selection <- selected_countries()
+      direction <- input$dep_direction
+      prefix    <- if (direction == "import") "GeoDep_M" else "GeoDep_X"
+      
+      zip_filename <- if (length(selection) == 2) {
+        paste0(prefix, "_dependencies_from_", selection[2], "_to_", selection[1], "_",
+               Sys.Date(), ".zip")
+      } else if (length(selection) == 1) {
+        paste0(prefix, "_dependencies_", selection[1], "_", direction, "_",
+               Sys.Date(), ".zip")
+      } else {
+        paste0(prefix, "_dependencies_", Sys.Date(), ".zip")
+      }
+      
+      tmp_dir <- tempfile("geodep_export_")
+      dir.create(tmp_dir)
+      on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+      
+      csv_name  <- paste0(prefix, "_selection.csv")
+      csv_path  <- file.path(tmp_dir, csv_name)
+      write_excel_csv2(filtered_dependency_data(), csv_path)
+      
+      readme_text <- generate_readme(
+        direction     = direction,
+        selection     = selection,
+        sector_filter = input$sector_filter,
+        map_metric    = input$map_metric,
+        zip_filename  = zip_filename
+      )
+      readme_path <- file.path(tmp_dir, "README.txt")
+      writeLines(readme_text, readme_path, useBytes = TRUE)
+      
+      zip::zip(
+        zipfile = file,
+        files   = c(basename(csv_path), basename(readme_path)),
+        root    = tmp_dir
+      )
+    }
+  )
+  
+  output$download_full <- downloadHandler(
+    filename = function() {
+      prefix <- if (input$dep_direction == "import") "GeoDep_M" else "GeoDep_X"
+      paste0(prefix, "_full_", Sys.Date(), ".zip")
+    },
+    contentType = "application/zip",
+    content = function(file) {
+      direction <- input$dep_direction
+      prefix    <- if (direction == "import") "GeoDep_M" else "GeoDep_X"
+      
+      full_data <- if (direction == "import") dep_import_base else dep_export_base
+      
+      zip_filename <- paste0(prefix, "_full_", Sys.Date(), ".zip")
+      
+      tmp_dir <- tempfile("geodep_full_export_")
+      dir.create(tmp_dir)
+      on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+      
+      csv_name <- paste0(prefix, "_full.csv")
+      csv_path <- file.path(tmp_dir, csv_name)
+      write_excel_csv2(full_data, csv_path)
+      
+      readme_text <- generate_readme(
+        direction     = direction,
+        selection     = character(),
+        sector_filter = "all",
+        map_metric    = input$map_metric,
+        zip_filename  = zip_filename,
+        is_full       = TRUE
+      )
+      readme_path <- file.path(tmp_dir, "README.txt")
+      writeLines(readme_text, readme_path, useBytes = TRUE)
+      
+      zip::zip(
+        zipfile = file,
+        files   = c(basename(csv_path), basename(readme_path)),
+        root    = tmp_dir
+      )
     }
   )
 }
