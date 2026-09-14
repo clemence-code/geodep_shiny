@@ -3065,38 +3065,57 @@
         "Built": "R 4.4.3; x86_64-w64-mingw32; 2026-04-22 00:54:12 UTC; windows",
         "Archs": "x64"
       }
+    },
+    "zip": {
+      "Source": "CRAN",
+      "Repository": "https://cran.rstudio.com",
+      "description": {
+        "Package": "zip",
+        "Title": "Cross-Platform 'zip' Compression",
+        "Version": "2.3.3",
+        "Authors@R": "c(\n    person(\"Gábor\", \"Csárdi\", , \"csardi.gabor@gmail.com\", role = c(\"aut\", \"cre\")),\n    person(\"Kuba\", \"Podgórski\", role = \"ctb\"),\n    person(\"Rich\", \"Geldreich\", role = \"ctb\"),\n    person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"),\n           comment = c(ROR = \"03wc8by49\"))\n  )",
+        "Description": "Cross-Platform 'zip' Compression Library. A replacement for\n    the 'zip' function, that does not require any additional external\n    tools on any platform.",
+        "License": "MIT + file LICENSE",
+        "URL": "https://github.com/r-lib/zip, https://r-lib.github.io/zip/",
+        "BugReports": "https://github.com/r-lib/zip/issues",
+        "Suggests": "covr, pillar, processx, R6, testthat, withr",
+        "Config/Needs/website": "tidyverse/tidytemplate",
+        "Config/testthat/edition": "3",
+        "Config/usethis/last-upkeep": "2025-05-07",
+        "Encoding": "UTF-8",
+        "RoxygenNote": "7.3.2.9000",
+        "NeedsCompilation": "yes",
+        "Packaged": "2025-05-13 13:31:44 UTC; gaborcsardi",
+        "Author": "Gábor Csárdi [aut, cre],\n  Kuba Podgórski [ctb],\n  Rich Geldreich [ctb],\n  Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
+        "Maintainer": "Gábor Csárdi <csardi.gabor@gmail.com>",
+        "Repository": "CRAN",
+        "Date/Publication": "2025-05-13 14:10:02 UTC",
+        "Built": "R 4.4.3; x86_64-w64-mingw32; 2026-04-22 00:54:12 UTC; windows",
+        "Archs": "x64"
+      }
     }
   },
   "files": {
     ".RData": {
       "checksum": "078098f0ff92ed0a742fc19272790ce2"
     },
-    "1_Data/1_CRM_UNCTAD_final.xlsx": {
-      "checksum": "4e3120e3062f31688bdeddcee112bf06"
+    ".RDataTmp": {
+      "checksum": "9d8ede023bd25c9bdafe4941f34ab422"
     },
-    "1_Data/2_Dual_use_EU_final.xlsx": {
-      "checksum": "9a00e11157b2caf9a55dc7c75fd19bbe"
+    "1_Data/geodep_M_hs22.csv": {
+      "checksum": "014bade01a6eb6fcb6f9081b6068933b"
     },
-    "1_Data/3_health_product_nomenclature_final.xlsx": {
-      "checksum": "db2f348716596a0ed2e88d8f0a6b345c"
-    },
-    "1_Data/4_Fertilisants_FAO_final.xlsx": {
-      "checksum": "dc9a64931afcd94dd060b7649bc179a2"
-    },
-    "1_Data/5_Agrifood_World_Bank_final.xlsx": {
-      "checksum": "1decc9406a430425d70342629f264bc2"
-    },
-    "1_Data/6_Energy_ECT_final.xlsx": {
-      "checksum": "8bd47d25c3d5dbe36aa7d192937d99be"
-    },
-    "1_Data/data_dep_M_hs22.dta": {
-      "checksum": "1d141963571a9657dad1d2acf43f4dd7"
-    },
-    "1_Data/data_dep_X_hs22.dta": {
-      "checksum": "923a615aece89cd782d35decda27261b"
+    "1_Data/geodep_M_hs22.dta": {
+      "checksum": "9e87e8112ca62579c96c9baed66f684f"
     },
     "1_Data/geodep_shiny_inputs.rds": {
-      "checksum": "c4c29f296ef26ad9e19c9d8c9e23ed18"
+      "checksum": "88091fb26397618062cece4dc66b71ef"
+    },
+    "1_Data/geodep_X_hs22.csv": {
+      "checksum": "267396b36dce4a9eea201777772b5859"
+    },
+    "1_Data/geodep_X_hs22.dta": {
+      "checksum": "70978891828a6451269e19a0a4a47509"
     },
     "1_Data/hs22_hs6.xlsx": {
       "checksum": "f5f689c409e66b61757693e155b54b9d"
@@ -3108,10 +3127,10 @@
       "checksum": "8716e9fcef9941a68c042cd219cd1422"
     },
     "app.R": {
-      "checksum": "34414965e54fad7927d601a1bc97f452"
+      "checksum": "667897933c5f59bb9655e14ac8834174"
     },
     "preparation.qmd": {
-      "checksum": "4d05b6a52c737fe716869ab7727d7903"
+      "checksum": "c4b46a713c1609fa85294761e6c96fd8"
     },
     "README.md": {
       "checksum": "a0bc22e3364c865de4601c866c8334b7"
