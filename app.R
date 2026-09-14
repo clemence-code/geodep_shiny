@@ -34,6 +34,8 @@ dep_export_base                           <- geodep_inputs$dep_export_base
 traded_by_country                           <- geodep_inputs$traded_by_country
 traded_by_country_export                      <- geodep_inputs$traded_by_country_export
 imports_sector_long_all                         <- geodep_inputs$imports_sector_long_all
+imports_final <- geodep_inputs$imports_final
+exports_final <- geodep_inputs$exports_final
 
 rm(geodep_inputs); gc()
 
@@ -602,15 +604,6 @@ server <- function(input, output, session) {
       select(iso_plot, count_share, value_share, n_dep, n_total, dep_value, total_value)
   }) |> bindCache(input$sector_filter, input$dep_direction)
   
-  ## -----------------------------------------------------------------------
-  ## hover_data: shows, per country, the countries that most often appear as
-  ## the LEADING import/export partner across its dependent products.
-  ## NOTE: dep_import_base / dep_export_base now hold a single (leading)
-  ## partner per (country, hs6) - there is no longer a full bilateral matrix
-  ## to rank "top 3" partners from, so this now surfaces the countries that
-  ## are the leading partner most often. The sector filter only applies to
-  ## the Import side, since GeoDep_X carries no sect_* columns.
-  ## -----------------------------------------------------------------------
   hover_data <- reactive({
     import_base <- dep_import_base
     export_base <- dep_export_base
@@ -618,8 +611,7 @@ server <- function(input, output, session) {
     if (input$sector_filter != "all" && input$sector_filter %in% names(import_base)) {
       import_base <- import_base |> filter(.data[[input$sector_filter]] == 1)
     }
-    # export_base has no sect_* columns in the GeoDep_X data model - no sector filtering applied
-    
+  
     import_top3 <- import_base |>
       group_by(iso_d, hs6) |>
       mutate(origin_share = imports / import_dpt) |>
@@ -866,12 +858,6 @@ server <- function(input, output, session) {
     }
   })
   
-  
-  ## -----------------------------------------------------------------------
-  ## sector_chart_data / make_sector_chart: sector breakdown chart.
-  ## Only meaningful for Imports (GeoDep_M carries sect_* columns; GeoDep_X
-  ## does not). Returns NULL for Exports so the UI can show a note instead.
-  ## -----------------------------------------------------------------------
   sector_chart_data <- reactive({
     selection <- selected_countries()
     req(length(selection) >= 1)
@@ -1020,8 +1006,6 @@ server <- function(input, output, session) {
       )
     }
     
-    ## Sector breakdown chart is only available for Imports (GeoDep_X carries
-    ## no sect_* columns); show an explanatory note instead for Exports.
     chart_block <- if (input$dep_direction == "import") {
       tagList(
         plotOutput("sector_chart", height = "320px"),
@@ -1040,11 +1024,7 @@ server <- function(input, output, session) {
     tagList(cards, chart_block)
   })
   
-  ## -----------------------------------------------------------------------
-  ## filtered_dependency_data: table shown below the map / downloaded as CSV.
-  ## Column set is built dynamically since GeoDep_X (exports) has neither a
-  ## Description column nor sect_* columns, unlike GeoDep_M (imports).
-  ## -----------------------------------------------------------------------
+
   filtered_dependency_data <- reactive({
     selection <- selected_countries()
     req(length(selection) >= 1)
@@ -1095,9 +1075,7 @@ server <- function(input, output, session) {
     if (input$sector_filter != "all" && input$sector_filter %in% names(base)) {
       base <- base |> filter(.data[[input$sector_filter]] == 1)
     }
-    
-    ## Only include Description / sect_* columns if they actually exist in
-    ## `base` (true for imports, absent for exports).
+
     optional_cols <- intersect(
       c("Description", grep("^sect_", names(base), value = TRUE)),
       names(base)
@@ -1232,7 +1210,7 @@ server <- function(input, output, session) {
       direction <- input$dep_direction
       prefix    <- if (direction == "import") "GeoDep_M" else "GeoDep_X"
       
-      full_data <- if (direction == "import") dep_import_base else dep_export_base
+      full_data <- if (direction == "import") imports_final else exports_final
       
       zip_filename <- paste0(prefix, "_full_", Sys.Date(), ".zip")
       
