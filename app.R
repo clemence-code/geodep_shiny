@@ -1101,7 +1101,8 @@ server <- function(input, output, session) {
           `Total Imports (World, k$)` = import_dpt,
           `Imports from Origin (k$)` = imports,
           `Share from Origin (%)` = share_odpt,
-          starts_with("sect_")
+          starts_with("sect_"),
+          -sect_strategic
         ) |>
         arrange(desc(`Imports from Origin (k$)`))
       
@@ -1129,11 +1130,13 @@ server <- function(input, output, session) {
       names(base)
     )
     
+    optional_cols <- setdiff(optional_cols, "sect_strategic")
+    
     result <- base |>
       distinct(across(all_of(c("hs6", total_col, optional_cols)))) |>
       arrange(desc(.data[[total_col]]))
     
-    colnames(result)[colnames(result) == "hs6"]     <- "HS6 Product"
+    colnames(result)[colnames(result) == "hs6"]      <- "HS6 Product"
     colnames(result)[colnames(result) == total_col] <- total_label
     
     result
@@ -1141,6 +1144,32 @@ server <- function(input, output, session) {
   
   output$dependency_table <- renderDT({
     data <- filtered_dependency_data()
+    sect_cols <- c("sect_crm", "sect_dual_use", "sect_health", "sect_agrifood", "sect_energy", "sect_other")
+    sect_labels <- c("Critical Raw Materials", "Dual Use", "Health", "Agrifood", "Energy", "Other")
+    
+    existing_cols <- intersect(sect_cols, names(data))
+    if (length(existing_cols) > 0) {
+      if (nrow(data) > 0) {
+        data$Sector <- apply(data[existing_cols], 1, function(row) {
+          labels_to_use <- sect_labels[sect_cols %in% existing_cols]
+          paste(labels_to_use[which(row == 1)], collapse = ", ")
+        })
+      } else {
+        data$Sector <- character(0)
+      }
+      data <- data |> select(-starts_with("sect_"))
+    }
+
+    front_cols <- c(
+      "HS6 Product", 
+      "Description", 
+      "Sector", 
+      "Total Imports (World, k$)", 
+      "Total Exports (World, k$)"
+    )
+    existing_front <- intersect(front_cols, names(data))
+    remaining_cols <- setdiff(names(data), existing_front)
+    data <- data[, c(existing_front, remaining_cols), drop = FALSE]
     
     value_cols <- intersect(
       c("Total Imports (World, k$)", "Total Exports (World, k$)", "Imports from Origin (k$)"),
@@ -1190,7 +1219,6 @@ server <- function(input, output, session) {
     
     dt
   })
-  
   output$download_table <- downloadHandler(
     filename = function() {
       selection <- selected_countries()
@@ -1228,6 +1256,8 @@ server <- function(input, output, session) {
       
       csv_name  <- paste0(prefix, "_selection.csv")
       csv_path  <- file.path(tmp_dir, csv_name)
+      
+      # This pulls the raw 1/0 sector data you requested for the CSV!
       write_excel_csv2(filtered_dependency_data(), csv_path)
       
       size_kb_unzipped <- format_kb(file.info(csv_path)$size)
