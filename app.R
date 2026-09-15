@@ -481,6 +481,7 @@ ui <- fluidPage(
           div(class = "section-block",
               uiOutput("partners_panel"),
               hr(),
+              uiOutput("table_heading"),
               DTOutput("dependency_table")
           )
       )
@@ -969,7 +970,7 @@ server <- function(input, output, session) {
       iso1 <- selection[1]
       iso2 <- if (length(selection) >= 2) paste0("_", selection[2]) else ""
       direction <- input$dep_direction
-      paste0("sector_chart_", direction, "_", iso1, iso2, "_2024.png")
+      paste0("GeoDep_sector_chart_", direction, "_", iso1, iso2, "_2024.png")
     },
     content = function(file) {
       
@@ -980,6 +981,30 @@ server <- function(input, output, session) {
              width = 10, height = 6, dpi = 300, bg = "white")
     }
   )
+
+  output$table_heading <- renderUI({
+    selection <- selected_countries()
+    req(length(selection) >= 1) 
+    
+    direction <- input$dep_direction
+    iso1_name <- iso_display_name(selection[1])
+
+    if (length(selection) == 1) {
+      title_text <- if (direction == "import") {
+        paste0("Products for which ", iso1_name, " is import-dependent")
+      } else {
+        paste0("Products for which ", iso1_name, " is export-dependent")
+      }
+    } else {
+      iso2_name <- iso_display_name(selection[2])
+      title_text <- if (direction == "import") {
+        paste0("Products for which ", iso1_name, " is import-dependent and ", iso2_name, " is the dominant supplier (>50%)")
+      } else {
+        paste0("Products for which ", iso1_name, " is export-dependent and ", iso2_name, " is the dominant destination (>50%)")
+      }
+    }
+    h3(title_text)
+  })
   
   output$partners_panel <- renderUI({
     selection <- selected_countries()
