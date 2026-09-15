@@ -935,26 +935,40 @@ server <- function(input, output, session) {
     df_long <- df_long |> mutate(Sector_Name = factor(Sector_Name, levels = sector_order))
     
     p <- ggplot(df_long, aes(x = Sector_Name, y = n, fill = category)) +
-      geom_col() +
+      geom_col(width = 0.75, color = "white", linewidth = 0.4) +
       coord_flip() +
       labs(
-        x = NULL, y = "Dependent products",
+        x = NULL, 
+        y = "Dependent products",
         title = paste0(flow_label, " dependencies by sector - ", iso_display_name(iso1), " (2024)"),
         subtitle = if (!is.na(iso2)) {
           paste0("Share of dependent products where ", iso_display_name(iso2),
                  " is the dominant ", direction_label, " (>50% of trade value)")
         } else {
-          "Select a second country to see its share as dominant partner"
+          ""
         },
         fill = NULL,
         caption = "Source : GeoDep IFE-CEPII (2026)"
       ) +
-      theme_minimal(base_size = 11) +
+      theme_minimal(base_size = 12) +
       theme(
-        legend.position = "bottom",
-        plot.caption    = element_text(hjust = 1, size = 8, color = "#666666", face = "italic")
+        plot.title    = element_text(face = "bold", size = 15, color = "#2b2b2b", margin = margin(b = 6)),
+        plot.subtitle = element_text(size = 11, color = "#666666", margin = margin(b = 15)),
+        plot.caption  = element_text(hjust = 1, size = 9, color = "#888888", face = "italic", margin = margin(t = 15)),
+
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor   = element_blank(),
+        panel.grid.major.x = element_line(color = "#e5e5e5", linewidth = 0.5, linetype = "dashed"),
+
+        axis.text.y   = element_text(face = "bold", color = "#333333", size = 11),
+        axis.text.x   = element_text(color = "#555555"),
+        axis.title.x  = element_text(color = "#444444", margin = margin(t = 12)),
+
+        legend.position      = "top",
+        legend.justification = "left",
+        legend.margin        = margin(b = -5),
+        legend.text          = element_text(size = 11, color = "#333333")
       )
-    
     if (!is.na(iso2)) {
       p <- p + scale_fill_manual(values = setNames(c("#e31a1c", "#4a86c9"),
                                                    c(dominant_label, "Other")))
@@ -986,14 +1000,14 @@ server <- function(input, output, session) {
              width = 10, height = 6, dpi = 300, bg = "white")
     }
   )
-
+  
   output$table_heading <- renderUI({
     selection <- selected_countries()
     req(length(selection) >= 1) 
     
     direction <- input$dep_direction
     iso1_name <- iso_display_name(selection[1])
-
+    
     if (length(selection) == 1) {
       title_text <- if (direction == "import") {
         paste0("Products for which ", iso1_name, " is import-dependent")
