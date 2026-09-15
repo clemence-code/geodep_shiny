@@ -380,7 +380,12 @@ ui <- fluidPage(
         min-height: 650px;
         display: flex;
         flex-direction: column;
+        position: sticky;
+        top: 20px; 
+        max-height: calc(100vh - 40px); 
+        overflow-y: auto; 
       }
+      
       .main-panel {
         flex: 1;
         min-width: 0;
@@ -998,9 +1003,9 @@ server <- function(input, output, session) {
     } else {
       iso2_name <- iso_display_name(selection[2])
       title_text <- if (direction == "import") {
-        paste0("Products for which ", iso1_name, " is import-dependent and ", iso2_name, " is the dominant supplier (>50%)")
+        paste0("Products for which ", iso1_name, " is import-dependent and ", iso2_name, " is the dominant supplier")
       } else {
-        paste0("Products for which ", iso1_name, " is export-dependent and ", iso2_name, " is the dominant destination (>50%)")
+        paste0("Products for which ", iso1_name, " is export-dependent and ", iso2_name, " is the dominant destination")
       }
     }
     h3(title_text)
