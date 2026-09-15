@@ -19,6 +19,7 @@ here::i_am('geodep_shiny.Rproj')
 ## -----------------------------------------------------------------------
 ## 0. Load precomputed inputs
 ## -----------------------------------------------------------------------
+
 geodep_inputs <- readRDS("1_Data/geodep_shiny_inputs.rds")
 
 DEP_YEAR                  <- geodep_inputs$DEP_YEAR
@@ -75,10 +76,18 @@ iso_name <- function(iso3) {
 ## -----------------------------------------------------------------------
 ## Helper: build README text for the zip download
 ## -----------------------------------------------------------------------
+format_kb <- function(bytes) {
+  format(round(bytes / 1000), big.mark = " ", scientific = FALSE)
+}
+
 generate_readme <- function(direction, selection, sector_filter, map_metric,
-                            zip_filename, is_full = FALSE) {
+                            zip_filename, size_kb_unzipped, size_kb_zipped = NULL,
+                            is_full = FALSE) {
   
   is_import <- direction == "import"
+  
+  unzipped_line <- paste0(size_kb_unzipped, " Kilobytes")
+  zipped_line   <- if (is.null(size_kb_zipped)) "" else paste0(size_kb_zipped, " Kilobytes")
   
   if (is_full) {
     selection_line <- paste0(
@@ -117,8 +126,8 @@ generate_readme <- function(direction, selection, sector_filter, map_metric,
       "Release Date : \n\n",
       "Weblink : https://www.cepii.fr/CEPII/fr/bdd_modele/bdd_modele_item.asp?id=41\n\n",
       "DOI : \n\n",
-      "Size (unzipped) : 75 675 Kilobytes\n\n",
-      "Size (zipped) : \n\n",
+      "Size (unzipped) : ", unzipped_line, "\n\n",
+      "Size (zipped) : ", zipped_line, "\n\n",
       "Software : this dataset was created using Stata 16\n\n",
       "Contents: GeoDep provides an assessment of trade dependencies for the year 2024 at the HS6 product level (revision 2022). GeoDep_M assesses import vulnerabilities by measuring concentration, substitutability, and strategic sector categorization (e.g., health, energy, agrifood, dual-use).\n\n",
       "List of Variables (GeoDep_M - Import Dependencies) :\n",
@@ -153,8 +162,8 @@ generate_readme <- function(direction, selection, sector_filter, map_metric,
       "Release Date : \n\n",
       "Weblink : https://www.cepii.fr/CEPII/fr/bdd_modele/bdd_modele_item.asp?id=41\n\n",
       "DOI : \n\n",
-      "Size (unzipped) : 39 064 Kilobytes\n\n",
-      "Size (zipped) : \n\n",
+      "Size (unzipped) : ", unzipped_line, "\n\n",
+      "Size (zipped) : ", zipped_line, "\n\n",
       "Software : this dataset was created using Stata 16\n\n",
       "Contents: GeoDep provides an assessment of trade dependencies for the year 2024 at the HS6 product level (revision 2022). GeoDep_X assesses export dependencies by measuring market concentration and substitutability by domestic demand.\n\n",
       "List of Variables (GeoDep_X - Export Dependencies) :\n",
@@ -294,13 +303,13 @@ ui <- fluidPage(
         border-color: #1f6f5c;
         box-shadow: 0 0 0 2px rgba(31, 111, 92, 0.2);
       }
-      
+
       select#sector_filter optgroup {
         font-weight: 700;
         font-style: normal;
       color: #1f6f5c;
       }
-      
+
       select#sector_filter option {
         font-weight: normal;
         color: #2b2b2b;
@@ -321,7 +330,7 @@ ui <- fluidPage(
         padding: 20px 24px;
         margin-bottom: 20px;
       }
-      
+
       #dependency_map {
         border: 1px solid #b7cdc6;
         border-radius: 4px;
@@ -394,7 +403,7 @@ ui <- fluidPage(
       .sidebar-actions .btn {
         flex: 1;
       }
-      
+
       @media (max-width: 768px) {
         .app-layout {
           flex-direction: column;
@@ -575,9 +584,6 @@ server <- function(input, output, session) {
         rename(iso_plot = iso_o, dep1 = dependant_X_MC_t, dep2 = c4_X_MC, val = export_opt)
     }
     
-    ## Sector columns only exist for the Import table (GeoDep_M); the sector
-    ## dropdown is locked to "all" while on Export, so this branch is a no-op
-    ## for exports in practice, but the guard is kept for safety.
     if (input$sector_filter != "all" && input$sector_filter %in% names(base)) {
       base <- base |> filter(.data[[input$sector_filter]] == 1)
     }
@@ -611,7 +617,7 @@ server <- function(input, output, session) {
     if (input$sector_filter != "all" && input$sector_filter %in% names(import_base)) {
       import_base <- import_base |> filter(.data[[input$sector_filter]] == 1)
     }
-  
+    
     import_top3 <- import_base |>
       group_by(iso_d, hs6) |>
       mutate(origin_share = imports / import_dpt) |>
@@ -815,7 +821,7 @@ server <- function(input, output, session) {
         )),
         labFormat = labelFormat(suffix = "%"),
         na.label  = "0%"
-      ) 
+      )
     if (length(sel) >= 1) {
       imp_sf <- map_sf |> filter(iso_plot == sel[1])
       if (nrow(imp_sf) > 0) {
@@ -866,7 +872,6 @@ server <- function(input, output, session) {
     iso1 <- selection[1]
     iso2 <- if (length(selection) >= 2) selection[2] else NA_character_
     
-    # leaf sector codes only (drop "all" and the "sect_strategic" umbrella)
     sector_cols <- setdiff(unlist(sector_choices_ui, use.names = FALSE),
                            c("all", "sect_strategic"))
     
@@ -971,7 +976,7 @@ server <- function(input, output, session) {
       p <- make_sector_chart()
       req(p)
       
-      ggsave(filename = file, plot = p, device = "png", 
+      ggsave(filename = file, plot = p, device = "png",
              width = 10, height = 6, dpi = 300, bg = "white")
     }
   )
@@ -1010,7 +1015,7 @@ server <- function(input, output, session) {
       tagList(
         plotOutput("sector_chart", height = "320px"),
         div(style = "text-align: right; margin-top: 10px;",
-            downloadButton("download_plot", "Download Graph (PNG)", 
+            downloadButton("download_plot", "Download Graph (PNG)",
                            style = "background-color: #6c7a76; color: white; border: none;")
         )
       )
@@ -1024,7 +1029,6 @@ server <- function(input, output, session) {
     tagList(cards, chart_block)
   })
   
-
   filtered_dependency_data <- reactive({
     selection <- selected_countries()
     req(length(selection) >= 1)
@@ -1075,7 +1079,7 @@ server <- function(input, output, session) {
     if (input$sector_filter != "all" && input$sector_filter %in% names(base)) {
       base <- base |> filter(.data[[input$sector_filter]] == 1)
     }
-
+    
     optional_cols <- intersect(
       c("Description", grep("^sect_", names(base), value = TRUE)),
       names(base)
@@ -1182,15 +1186,40 @@ server <- function(input, output, session) {
       csv_path  <- file.path(tmp_dir, csv_name)
       write_excel_csv2(filtered_dependency_data(), csv_path)
       
-      readme_text <- generate_readme(
-        direction     = direction,
-        selection     = selection,
-        sector_filter = input$sector_filter,
-        map_metric    = input$map_metric,
-        zip_filename  = zip_filename
-      )
+      size_kb_unzipped <- format_kb(file.info(csv_path)$size)
+      
       readme_path <- file.path(tmp_dir, "README.txt")
-      writeLines(readme_text, readme_path, useBytes = TRUE)
+      
+      readme_text_draft <- generate_readme(
+        direction        = direction,
+        selection        = selection,
+        sector_filter    = input$sector_filter,
+        map_metric       = input$map_metric,
+        zip_filename     = zip_filename,
+        size_kb_unzipped = size_kb_unzipped,
+        size_kb_zipped   = NULL
+      )
+      writeLines(readme_text_draft, readme_path, useBytes = TRUE)
+      
+      tmp_zip_path <- file.path(tmp_dir, "__probe.zip")
+      zip::zip(
+        zipfile = tmp_zip_path,
+        files   = c(basename(csv_path), basename(readme_path)),
+        root    = tmp_dir
+      )
+      size_kb_zipped <- format_kb(file.info(tmp_zip_path)$size)
+      file.remove(tmp_zip_path)
+      
+      readme_text_final <- generate_readme(
+        direction        = direction,
+        selection        = selection,
+        sector_filter    = input$sector_filter,
+        map_metric       = input$map_metric,
+        zip_filename     = zip_filename,
+        size_kb_unzipped = size_kb_unzipped,
+        size_kb_zipped   = size_kb_zipped
+      )
+      writeLines(readme_text_final, readme_path, useBytes = TRUE)
       
       zip::zip(
         zipfile = file,
@@ -1199,7 +1228,6 @@ server <- function(input, output, session) {
       )
     }
   )
-  
   
   output$download_full <- downloadHandler(
     filename = function() {
@@ -1223,16 +1251,42 @@ server <- function(input, output, session) {
       csv_path <- file.path(tmp_dir, csv_name)
       write_excel_csv2(full_data, csv_path)
       
-      readme_text <- generate_readme(
-        direction     = direction,
-        selection     = character(),
-        sector_filter = "all",
-        map_metric    = input$map_metric,
-        zip_filename  = zip_filename,
-        is_full       = TRUE
-      )
+      size_kb_unzipped <- format_kb(file.info(csv_path)$size)
+      
       readme_path <- file.path(tmp_dir, "README.txt")
-      writeLines(readme_text, readme_path, useBytes = TRUE)
+      
+      readme_text_draft <- generate_readme(
+        direction        = direction,
+        selection        = character(),
+        sector_filter    = "all",
+        map_metric       = input$map_metric,
+        zip_filename     = zip_filename,
+        size_kb_unzipped = size_kb_unzipped,
+        size_kb_zipped   = NULL,
+        is_full          = TRUE
+      )
+      writeLines(readme_text_draft, readme_path, useBytes = TRUE)
+      
+      tmp_zip_path <- file.path(tmp_dir, "__probe.zip")
+      zip::zip(
+        zipfile = tmp_zip_path,
+        files   = c(basename(csv_path), basename(readme_path)),
+        root    = tmp_dir
+      )
+      size_kb_zipped <- format_kb(file.info(tmp_zip_path)$size)
+      file.remove(tmp_zip_path)
+      
+      readme_text_final <- generate_readme(
+        direction        = direction,
+        selection        = character(),
+        sector_filter    = "all",
+        map_metric       = input$map_metric,
+        zip_filename     = zip_filename,
+        size_kb_unzipped = size_kb_unzipped,
+        size_kb_zipped   = size_kb_zipped,
+        is_full          = TRUE
+      )
+      writeLines(readme_text_final, readme_path, useBytes = TRUE)
       
       zip::zip(
         zipfile = file,
