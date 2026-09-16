@@ -866,7 +866,7 @@ server <- function(input, output, session) {
       imp_sf <- map_sf |> filter(iso_plot == sel[1])
       if (nrow(imp_sf) > 0) {
         proxy <- proxy |> addPolygons(
-          data = imp_sf, fill = FALSE, color = "#1f78b4", weight = 4,
+          data = imp_sf, fill = FALSE, color = "#1f6f5c", weight = 4,
           opacity = 1, layerId = paste0("highlight_importer_", imp_sf$feature_id)
         )
       }
@@ -875,7 +875,7 @@ server <- function(input, output, session) {
       exp_sf <- map_sf |> filter(iso_plot == sel[2])
       if (nrow(exp_sf) > 0) {
         proxy <- proxy |> addPolygons(
-          data = exp_sf, fill = FALSE, color = "#e31a1c", weight = 4,
+          data = exp_sf, fill = FALSE, color = "#8b3a3a", weight = 4,
           opacity = 1, layerId = paste0("highlight_exporter_", exp_sf$feature_id)
         )
       }
@@ -1004,10 +1004,10 @@ server <- function(input, output, session) {
         legend.text          = element_text(size = 11, color = "#333333")
       )
     if (!is.na(iso2)) {
-      p <- p + scale_fill_manual(values = setNames(c("#e31a1c", "#4a86c9"),
+      p <- p + scale_fill_manual(values = setNames(c("#8b3a3a", "#1f6f5c"),
                                                    c(dominant_label, "Other")))
     } else {
-      p <- p + scale_fill_manual(values = c("Other" = "#4a86c9"), guide = "none")
+      p <- p + scale_fill_manual(values = c("Other" = "#1f6f5c"), guide = "none")
     }
     
     p
