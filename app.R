@@ -107,7 +107,7 @@ generate_readme <- function(direction, selection, sector_filter, map_metric,
     }
     
     sector_label <- if (sector_filter == "all") "All Sectors" else sector_filter
-    metric_label <- if (map_metric == "count") "Share of products" else "Share of trade value"
+    metric_label <- if (map_metric == "count") "Share of number of products" else "Share of trade value"
     
     selection_line <- paste0(
       "Selection used for this extract : Direction = ", if (is_import) "Imports" else "Exports",
@@ -454,7 +454,7 @@ ui <- fluidPage(
   div(class = "app-layout",
       div(class = "sidebar-panel",
           div(class = "sidebar-section",
-              radioButtons("dep_direction", "Show dependencies for:",
+              radioButtons("dep_direction", "Dimension of dependencies:",
                            choices = c("Imports" = "import", "Exports" = "export"),
                            selected = "import")
           ),
@@ -770,7 +770,7 @@ server <- function(input, output, session) {
     metric <- input$map_metric
     sel    <- selected_countries()
     direction_label <- if (input$dep_direction == "import") "import" else "export"
-    partner_role    <- if (input$dep_direction == "import") "supplier" else "buyer"
+    partner_role    <- if (input$dep_direction == "import") "exporter" else "destination"
     
     fill_values <- if (metric == "count") map_sf$count_share else map_sf$value_share
     
@@ -960,7 +960,7 @@ server <- function(input, output, session) {
         title = paste0(flow_label, " dependencies by sector - ", iso_display_name(iso1), " (2024)"),
         subtitle = if (!is.na(iso2)) {
           paste0("Share of dependent products where ", iso_display_name(iso2),
-                 " is the dominant ", direction_label, " (>50% of trade value)")
+                 " is the leading ", direction_label, " (>50% of trade value)")
         } else {
           ""
         },
@@ -1034,9 +1034,9 @@ server <- function(input, output, session) {
     } else {
       iso2_name <- iso_display_name(selection[2])
       title_text <- if (direction == "import") {
-        paste0("Products for which ", iso1_name, " is import-dependent and ", iso2_name, " is the dominant supplier")
+        paste0("Products for which ", iso1_name, " is import-dependent and ", iso2_name, " is the leading exporter")
       } else {
-        paste0("Products for which ", iso1_name, " is export-dependent and ", iso2_name, " is the dominant destination")
+        paste0("Products for which ", iso1_name, " is export-dependent and ", iso2_name, " is the first destination")
       }
     }
     h3(title_text)
@@ -1201,7 +1201,7 @@ server <- function(input, output, session) {
     }
     
     empty_msg <- if (length(selected_countries()) == 2) {
-      "No product where the importer is dependent and this exporter is the dominant supplier (>50%)."
+      "No product where the importer is dependent and this exporter is the  supplier (>50%)."
     } else {
       "No dependent products found for this selection."
     }
