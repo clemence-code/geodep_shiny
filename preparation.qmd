@@ -169,6 +169,27 @@ imports_sector_long_all <- imports_final |>
   filter(is_in_sector == 1) |>
   mutate(Sector_Name = sector_names[Sector])
 ```
+```{r}
+
+trade_isos <- c(
+  imports_final$iso_d,
+  imports_final$first_odpt,
+  exports_final$iso_o,
+  exports_final$first_dpto
+) |>
+  unique() |>
+  na.omit() |>
+  to_eun() |>
+  unique()
+
+country_choices_lookup <- iso_name_lookup |>
+  filter(!iso_a3 %in% eu_countries) |>  
+  filter(iso_a3 %in% trade_isos)          
+
+country_choices <- setNames(country_choices_lookup$iso_a3, country_choices_lookup$name)
+country_choices <- country_choices[order(names(country_choices))]
+country_choices_ui <- c("Select a country..." = "", country_choices)
+```
 
 ## 4. Save everything the app needs
 
