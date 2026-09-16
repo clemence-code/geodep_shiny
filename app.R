@@ -464,7 +464,7 @@ ui <- fluidPage(
           ),
           div(class = "sidebar-section",
               radioButtons("map_metric", "Map shows:",
-                           choices = c("Share of products" = "count",
+                           choices = c("Share of number of products" = "count",
                                        "Share of trade value" = "value"),
                            selected = "count")
           ),
