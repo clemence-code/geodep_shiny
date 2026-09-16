@@ -516,6 +516,8 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   selected_countries <- reactiveVal(character())
+  suppress_input_sync <- reactiveVal(0L)  
+  
   
   observeEvent(input$info_button, {
     showModal(modalDialog(
@@ -576,11 +578,22 @@ server <- function(input, output, session) {
     sel <- selected_countries()
     imp <- if (length(sel) >= 1) sel[1] else ""
     exp <- if (length(sel) >= 2) sel[2] else ""
-    updateSelectizeInput(session, "importer_select", selected = imp)
-    updateSelectizeInput(session, "exporter_select", selected = exp)
+
+    need_imp <- !identical(input$importer_select, imp)
+    need_exp <- !identical(input$exporter_select, exp)
+    
+    if (need_imp || need_exp) {
+      suppress_input_sync(suppress_input_sync() + sum(need_imp, need_exp))
+      if (need_imp) updateSelectizeInput(session, "importer_select", selected = imp)
+      if (need_exp) updateSelectizeInput(session, "exporter_select", selected = exp)
+    }
   }, ignoreInit = TRUE)
   
   observeEvent(input$importer_select, {
+    if (suppress_input_sync() > 0) {
+      suppress_input_sync(suppress_input_sync() - 1) 
+      return(invisible(NULL))
+    }
     cur <- selected_countries()
     new_imp <- input$importer_select
     new_sel <- c(new_imp, if (length(cur) >= 2) cur[2] else NA)
@@ -589,6 +602,10 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   observeEvent(input$exporter_select, {
+    if (suppress_input_sync() > 0) {
+      suppress_input_sync(suppress_input_sync() - 1)  
+      return(invisible(NULL))
+    }
     cur <- selected_countries()
     imp <- if (length(cur) >= 1) cur[1] else NA
     new_sel <- c(imp, input$exporter_select)
