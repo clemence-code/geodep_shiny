@@ -189,6 +189,23 @@ generate_readme <- function(direction, selection, sector_filter, map_metric,
   header
 }
 
+reference_files <- c("product_codes_HS22_V202601.csv", "country_codes_V202601.csv")
+
+copy_reference_files <- function(tmp_dir, data_dir = "1_Data") {
+  src_paths <- file.path(data_dir, reference_files)
+  present   <- file.exists(src_paths)
+  
+  if (any(!present)) {
+    warning("Missing reference file(s): ", paste(reference_files[!present], collapse = ", "))
+  }
+  
+  Map(function(src, ok) {
+    if (ok) file.copy(src, file.path(tmp_dir, basename(src)), overwrite = TRUE)
+  }, src_paths, present)
+  
+  reference_files[present]
+}
+
 ## -----------------------------------------------------------------------
 ## 2. UI
 ## -----------------------------------------------------------------------
@@ -1209,7 +1226,7 @@ server <- function(input, output, session) {
         columns  = value_cols,
         currency = "",
         interval = 3,
-        mark     = ".",
+        mark     = ",",
         digits   = 0
       )
     
@@ -1256,9 +1273,9 @@ server <- function(input, output, session) {
       
       csv_name  <- paste0(prefix, "_selection.csv")
       csv_path  <- file.path(tmp_dir, csv_name)
-      
-      # This pulls the raw 1/0 sector data you requested for the CSV!
+
       write_excel_csv2(filtered_dependency_data(), csv_path)
+      included_ref_files <- copy_reference_files(tmp_dir)
       
       size_kb_unzipped <- format_kb(file.info(csv_path)$size)
       
@@ -1278,7 +1295,7 @@ server <- function(input, output, session) {
       tmp_zip_path <- file.path(tmp_dir, "__probe.zip")
       zip::zip(
         zipfile = tmp_zip_path,
-        files   = c(basename(csv_path), basename(readme_path)),
+        files   = c(basename(csv_path), basename(readme_path), included_ref_files),
         root    = tmp_dir
       )
       size_kb_zipped <- format_kb(file.info(tmp_zip_path)$size)
@@ -1297,7 +1314,7 @@ server <- function(input, output, session) {
       
       zip::zip(
         zipfile = file,
-        files   = c(basename(csv_path), basename(readme_path)),
+        files   = c(basename(csv_path), basename(readme_path), included_ref_files),
         root    = tmp_dir
       )
     }
@@ -1324,6 +1341,7 @@ server <- function(input, output, session) {
       csv_name <- paste0(prefix, "_full.csv")
       csv_path <- file.path(tmp_dir, csv_name)
       write_excel_csv2(full_data, csv_path)
+      included_ref_files <- copy_reference_files(tmp_dir)
       
       size_kb_unzipped <- format_kb(file.info(csv_path)$size)
       
@@ -1344,7 +1362,7 @@ server <- function(input, output, session) {
       tmp_zip_path <- file.path(tmp_dir, "__probe.zip")
       zip::zip(
         zipfile = tmp_zip_path,
-        files   = c(basename(csv_path), basename(readme_path)),
+        files   = c(basename(csv_path), basename(readme_path), included_ref_files),
         root    = tmp_dir
       )
       size_kb_zipped <- format_kb(file.info(tmp_zip_path)$size)
@@ -1364,7 +1382,7 @@ server <- function(input, output, session) {
       
       zip::zip(
         zipfile = file,
-        files   = c(basename(csv_path), basename(readme_path)),
+        files   = c(basename(csv_path), basename(readme_path), included_ref_files),
         root    = tmp_dir
       )
     }
