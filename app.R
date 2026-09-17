@@ -574,43 +574,71 @@ server <- function(input, output, session) {
     }
   }, ignoreInit = FALSE)
   
+  exclude_choice <- function(choices, exclude_val) {
+    if (is.list(choices)) {
+      lapply(choices, function(grp) grp[grp != exclude_val])
+    } else {
+      choices[choices != exclude_val]
+    }
+  }
+  
+  prev_sel <- reactiveVal(character())
   observeEvent(selected_countries(), {
     sel <- selected_countries()
     imp <- if (length(sel) >= 1) sel[1] else ""
     exp <- if (length(sel) >= 2) sel[2] else ""
-
-    need_imp <- !identical(input$importer_select, imp)
-    need_exp <- !identical(input$exporter_select, exp)
     
-    if (need_imp || need_exp) {
-      suppress_input_sync(suppress_input_sync() + sum(need_imp, need_exp))
-      if (need_imp) updateSelectizeInput(session, "importer_select", selected = imp)
-      if (need_exp) updateSelectizeInput(session, "exporter_select", selected = exp)
+    p_sel <- prev_sel()
+    p_imp <- if (length(p_sel) >= 1) p_sel[1] else ""
+    p_exp <- if (length(p_sel) >= 2) p_sel[2] else ""
+
+    changed_imp <- !identical(imp, p_imp)
+    changed_exp <- !identical(exp, p_exp)
+    
+    choices_imp <- if (exp != "") exclude_choice(country_choices_ui, exp) else country_choices_ui
+    choices_exp <- if (imp != "") exclude_choice(country_choices_ui, imp) else country_choices_ui
+    
+    need_imp_ui <- !identical(input$importer_select, imp)
+    need_exp_ui <- !identical(input$exporter_select, exp)
+    
+    update_imp <- need_imp_ui || changed_exp
+    update_exp <- need_exp_ui || changed_imp
+    
+    prev_sel(sel)
+    
+    if (update_imp || update_exp) {
+      if (update_imp) {
+        updateSelectizeInput(session, "importer_select", 
+                             choices = choices_imp, selected = imp)
+      }
+      if (update_exp) {
+        updateSelectizeInput(session, "exporter_select", 
+                             choices = choices_exp, selected = exp)
+      }
     }
+    
   }, ignoreInit = TRUE)
   
   observeEvent(input$importer_select, {
-    if (suppress_input_sync() > 0) {
-      suppress_input_sync(suppress_input_sync() - 1) 
-      return(invisible(NULL))
-    }
     cur <- selected_countries()
     new_imp <- input$importer_select
     new_sel <- c(new_imp, if (length(cur) >= 2) cur[2] else NA)
     new_sel <- new_sel[!is.na(new_sel) & new_sel != ""]
-    if (!identical(new_sel, cur)) selected_countries(new_sel)
+
+    if (!identical(new_sel, cur)) {
+      selected_countries(new_sel)
+    }
   }, ignoreInit = TRUE)
   
   observeEvent(input$exporter_select, {
-    if (suppress_input_sync() > 0) {
-      suppress_input_sync(suppress_input_sync() - 1)  
-      return(invisible(NULL))
-    }
     cur <- selected_countries()
     imp <- if (length(cur) >= 1) cur[1] else NA
     new_sel <- c(imp, input$exporter_select)
     new_sel <- new_sel[!is.na(new_sel) & new_sel != ""]
-    if (!identical(new_sel, cur)) selected_countries(new_sel)
+
+    if (!identical(new_sel, cur)) {
+      selected_countries(new_sel)
+    }
   }, ignoreInit = TRUE)
   
   sector_map_data <- reactive({
@@ -649,28 +677,9 @@ server <- function(input, output, session) {
       ) |>
       select(iso_plot, count_share, value_share, n_dep, n_total, dep_value, total_value)
   }) |> bindCache(input$sector_filter, input$dep_direction)
-  
-  hover_data <- reactive({
-    import_base <- dep_import_base
+
+  export_hover_data <- reactive({
     export_base <- dep_export_base
-    
-    if (input$sector_filter != "all" && input$sector_filter %in% names(import_base)) {
-      import_base <- import_base |> filter(.data[[input$sector_filter]] == 1)
-    }
-    
-    import_top3 <- import_base |>
-      group_by(iso_d, hs6) |>
-      mutate(origin_share = imports / import_dpt) |>
-      ungroup() |>
-      filter(origin_share > 0.5) |>
-      group_by(iso_d, iso_o) |>
-      summarise(dep_count = n(), .groups = "drop") |>
-      arrange(iso_d, desc(dep_count)) |>
-      group_by(iso_d) |>
-      slice_head(n = 3) |>
-      mutate(part = paste0(iso_name(iso_o), " (", dep_count, ")")) |>
-      summarise(import_top3 = paste(part, collapse = "; "), .groups = "drop") |>
-      rename(iso_plot = iso_d)
     
     export_top3 <- export_base |>
       group_by(iso_o, hs6) |>
@@ -686,8 +695,8 @@ server <- function(input, output, session) {
       summarise(export_top3 = paste(part, collapse = "; "), .groups = "drop") |>
       rename(iso_plot = iso_o)
     
-    full_join(import_top3, export_top3, by = "iso_plot")
-  }) |> bindCache(input$sector_filter)
+    export_top3
+  })
   
   partner_map_data <- reactive({
     selection <- selected_countries()
@@ -989,15 +998,15 @@ server <- function(input, output, session) {
         plot.title    = element_text(face = "bold", size = 15, color = "#2b2b2b", margin = margin(b = 6)),
         plot.subtitle = element_text(size = 11, color = "#666666", margin = margin(b = 15)),
         plot.caption  = element_text(hjust = 1, size = 9, color = "#888888", face = "italic", margin = margin(t = 15)),
-
+        
         panel.grid.major.y = element_blank(),
         panel.grid.minor   = element_blank(),
         panel.grid.major.x = element_line(color = "#e5e5e5", linewidth = 0.5, linetype = "dashed"),
-
+        
         axis.text.y   = element_text(face = "bold", color = "#333333", size = 11),
         axis.text.x   = element_text(color = "#555555"),
         axis.title.x  = element_text(color = "#444444", margin = margin(t = 12)),
-
+        
         legend.position      = "top",
         legend.justification = "left",
         legend.margin        = margin(b = -5),
@@ -1035,6 +1044,109 @@ server <- function(input, output, session) {
     }
   )
   
+  output$download_partner_plot <- downloadHandler(
+    filename = function() {
+      selection <- selected_countries()
+      req(length(selection) >= 1)
+      iso1 <- selection[1]
+      paste0("GeoDep_partner_sector_chart_", iso1, "_2024.png")
+    },
+    content = function(file) {
+      selection <- selected_countries()
+      req(length(selection) >= 1)
+      iso1 <- selection[1]
+      
+      p <- tryCatch(make_partner_sector_chart(iso1), error = function(e) NULL)
+      req(p)
+      
+      ggsave(filename = file, plot = p, device = "png",
+             width = 10, height = 6, dpi = 300, bg = "white")
+    }
+  )
+  
+  partner_sector_chart_data <- function(iso1) {
+    sector_cols <- setdiff(unlist(sector_choices_ui, use.names = FALSE),
+                           c("all", "sect_strategic", "sect_other"))
+
+    base <- imports_final |> filter(iso_d == iso1)
+    
+    if ("dependent" %in% names(base)) {
+      base <- base |> filter(dependent == 1)
+    }
+    
+    if (nrow(base) == 0) return(NULL)
+    
+    avail_sector_cols <- intersect(sector_cols, names(base))
+    if (length(avail_sector_cols) == 0) return(NULL)
+    
+    df0 <- base |>
+      distinct(hs6, first_odpt, across(all_of(avail_sector_cols)))
+    
+    top3_partners <- df0 |>
+      count(first_odpt, sort = TRUE, name = "n_products") |>
+      slice_head(n = 3) |>
+      pull(first_odpt)
+    
+    if (length(top3_partners) == 0) return(NULL)
+    
+    partner_labels <- iso_display_name(top3_partners)
+    
+    df <- df0 |>
+      pivot_longer(cols = all_of(avail_sector_cols), names_to = "sector_code", values_to = "flag") |>
+      filter(flag == 1) |>
+      mutate(
+        Sector_Name   = unlist(sector_names[sector_code]),
+        partner_group = if_else(first_odpt %in% top3_partners,
+                                iso_display_name(first_odpt), "ROW")
+      ) |>
+      count(Sector_Name, partner_group, name = "n_dep")
+    
+    if (nrow(df) == 0) return(NULL)
+    
+    df |>
+      mutate(partner_group = factor(partner_group, levels = c(partner_labels, "ROW")))
+  }
+  
+  make_partner_sector_chart <- function(iso1) {
+    df <- partner_sector_chart_data(iso1)
+    if (is.null(df) || nrow(df) == 0) return(NULL)
+    
+    sector_order <- df |>
+      group_by(Sector_Name) |>
+      summarise(total = sum(n_dep), .groups = "drop") |>
+      arrange(total) |>
+      pull(Sector_Name)
+    
+    df <- df |> mutate(Sector_Name = factor(Sector_Name, levels = sector_order))
+    
+    partner_levels <- levels(df$partner_group)
+    n_partners     <- length(partner_levels) - 1
+    base_colors    <- c("#1f6f5c", "#8b3a3a", "#4a7c9e")
+    fill_colors    <- setNames(base_colors[seq_len(n_partners)], partner_levels[seq_len(n_partners)])
+    fill_colors    <- c(fill_colors, "ROW" = "#b0b0b0")
+    
+    ggplot(df, aes(x = Sector_Name, y = n_dep, fill = partner_group)) +
+      geom_col(width = 0.7, color = "white", linewidth = 0.4) +
+      labs(
+        x = NULL, y = "Nber of dependent HS6 products",
+        title = iso_display_name(iso1),
+        fill = NULL,
+        caption = "Source : GeoDep IFE-CEPII (2026)"
+      ) +
+      scale_fill_manual(values = fill_colors) +
+      theme_minimal(base_size = 12) +
+      theme(
+        plot.title          = element_text(face = "bold", hjust = 0.5, size = 15, color = "#2b2b2b"),
+        plot.caption        = element_text(hjust = 1, size = 9, color = "#888888", face = "italic"),
+        panel.grid.major.x  = element_blank(),
+        panel.grid.minor    = element_blank(),
+        panel.grid.major.y  = element_line(color = "#e5e5e5", linewidth = 0.5, linetype = "dashed"),
+        axis.text.x         = element_text(face = "bold", color = "#333333", size = 10, angle = 20, hjust = 1),
+        legend.position     = "bottom",
+        legend.text         = element_text(size = 10)
+      )
+  }
+  
   output$table_heading <- renderUI({
     selection <- selected_countries()
     req(length(selection) >= 1) 
@@ -1063,86 +1175,155 @@ server <- function(input, output, session) {
     selection <- selected_countries()
     if (length(selection) == 0) return(NULL)
     
-    hover <- hover_data()
+    direction <- input$dep_direction
     
-    make_card_ui <- function(idx) {
-      iso <- selection[idx]
-      row <- hover |> filter(iso_plot == iso)
-      import_txt <- if (nrow(row) == 0 || is.na(row$import_top3[1])) "None identified" else row$import_top3[1]
-      export_txt <- if (nrow(row) == 0 || is.na(row$export_top3[1])) "None identified" else row$export_top3[1]
+    if (direction == "import") {
       
-      wellPanel(
-        h4(iso_display_name(iso)),
-        tags$p(tags$em("Depends on for imports (top exporters to it):")),
-        tags$p(import_txt),
-        tags$p(tags$em("Depends on for exports (top destinations):")),
-        tags$p(export_txt)
-      )
-    }
-    
-    cards <- if (length(selection) == 1) {
-      fluidRow(column(6, make_card_ui(1)))
-    } else {
-      fluidRow(
-        column(6, make_card_ui(1)),
-        column(6, make_card_ui(2))
-      )
-    }
-    
-    chart_block <- if (input$dep_direction == "import") {
-      tagList(
-        plotOutput("sector_chart", height = "320px"),
-        div(style = "text-align: right; margin-top: 10px;",
-            downloadButton("download_plot", "Download Graph (PNG)",
-                           style = "background-color: #6c7a76; color: white; border: none;")
+      if (length(selection) == 1) {
+        iso1 <- selection[1]
+        plot_id <- "partner_sector_plot_1"
+        
+        local({
+          iso_local <- iso1
+          output[[plot_id]] <- renderPlot({
+            p <- tryCatch(make_partner_sector_chart(iso_local),
+                          error = function(e) NULL)
+            req(p)
+            p
+          })
+        })
+        
+        return(
+          div(class = "well",
+              div(style = "display: flex; gap: 24px; align-items: stretch;",
+                  div(style = "flex: 1; min-width: 0; display: flex; flex-direction: column;",
+                      div(style = "min-height: 68px;",
+                          h4(iso_display_name(iso1))
+                      ),
+                      plotOutput(plot_id, height = "320px"),
+                      div(style = "text-align: right; margin-top: auto; padding-top: 10px;",
+                          downloadButton("download_partner_plot", "Download Graph (PNG)",
+                                         style = "background-color: #6c7a76; color: white; border: none;")
+                      )
+                  ),
+                  div(style = "flex: 1; min-width: 0; display: flex; flex-direction: column;",
+                      div(style = "min-height: 68px;",
+                          h4("Sector breakdown")
+                      ),
+                      plotOutput("sector_chart", height = "320px"),
+                      div(style = "text-align: right; margin-top: auto; padding-top: 10px;",
+                          downloadButton("download_plot", "Download Graph (PNG)",
+                                         style = "background-color: #6c7a76; color: white; border: none;")
+                      )
+                  )
+              )
+          )
         )
-      )
+      } else {
+        return(
+          div(class = "well",
+              plotOutput("sector_chart", height = "320px"),
+              div(style = "text-align: right; margin-top: 10px;",
+                  downloadButton("download_plot", "Download Graph (PNG)",
+                                 style = "background-color: #6c7a76; color: white; border: none;")
+              )
+          )
+        )
+      }
+      
     } else {
-      div(
+      make_card_ui <- function(idx) {
+        iso <- selection[idx]
+        row <- tryCatch(export_hover_data() |> filter(iso_plot == iso),
+                        error = function(e) NULL)
+        export_txt <- if (is.null(row) || nrow(row) == 0 || is.na(row$export_top3[1])) {
+          "None identified"
+        } else {
+          row$export_top3[1]
+        }
+        
+        wellPanel(
+          h4(iso_display_name(iso)),
+          tags$p(tags$em("Depends on for exports (top destinations):")),
+          tags$p(export_txt)
+        )
+      }
+      
+      cards <- tryCatch({
+        if (length(selection) == 1) {
+          fluidRow(column(12, make_card_ui(1)))
+        } else {
+          fluidRow(
+            column(12, make_card_ui(1)),
+            column(12, make_card_ui(2))
+          )
+        }
+      }, error = function(e) {
+        div(class = "well", "Unable to display the partner breakdown for this selection.")
+      })
+      
+      info_msg <- div(
         style = "padding: 14px 18px; background-color: #f4f8f6; border: 1px solid #cfe0da; border-left: 5px solid #8b3a3a; border-radius: 4px; color: #666; font-style: italic;",
         "Sector breakdown is only available for Import dependencies (GeoDep_M). Export dependencies (GeoDep_X) are not sector-tagged."
       )
+      
+      tagList(cards, info_msg)
     }
-    
-    tagList(cards, chart_block)
   })
   
   filtered_dependency_data <- reactive({
     selection <- selected_countries()
     req(length(selection) >= 1)
-    
     if (length(selection) == 2) {
-      destination <- selection[1]
-      origin <- selection[2]
+      subject <- selection[1]
+      partner <- selection[2]
       
-      result <- dep_import_base |>
-        filter(iso_d == destination, iso_o == origin) |>
-        group_by(hs6) |>
-        mutate(origin_share = imports / import_dpt) |>
-        ungroup() |>
-        filter(origin_share > 0.5)
-      
-      if (input$sector_filter != "all") {
+      if (input$dep_direction == "import") {
+        result <- dep_import_base |>
+          filter(iso_d == subject, iso_o == partner) |>
+          group_by(hs6) |>
+          mutate(origin_share = imports / import_dpt) |>
+          ungroup() |>
+          filter(origin_share > 0.5)
+        
+        if (input$sector_filter != "all") {
+          result <- result |> filter(.data[[input$sector_filter]] == 1)
+        }
+        
         result <- result |>
-          filter(.data[[input$sector_filter]] == 1)
+          mutate(share_odpt = origin_share * 100) |>
+          select(
+            `HS6 Product` = hs6,
+            `Description` = Description,
+            `Total Imports (World, k$)` = import_dpt,
+            `Imports from Origin (k$)` = imports,
+            `Share from Origin (%)` = share_odpt,
+            starts_with("sect_"),
+            -sect_strategic
+          ) |>
+          arrange(desc(`Imports from Origin (k$)`))
+      } else {
+        result <- dep_export_base |>
+          filter(iso_o == subject, iso_d == partner) |>
+          group_by(hs6) |>
+          mutate(dest_share = imports / export_opt) |>
+          ungroup() |>
+          filter(dest_share > 0.5)
+        
+        result <- result |>
+          mutate(share_dpto = dest_share * 100) |>
+          select(
+            `HS6 Product` = hs6,
+            `Description` = Description,
+            `Total Exports (World, k$)` = export_opt,
+            `Exports to Destination (k$)` = imports,
+            `Share to Destination (%)` = share_dpto
+          ) |>
+          arrange(desc(`Exports to Destination (k$)`))
       }
-      
-      result <- result |>
-        mutate(share_odpt = origin_share * 100) |>
-        select(
-          `HS6 Product` = hs6,
-          `Description` = Description,
-          `Total Imports (World, k$)` = import_dpt,
-          `Imports from Origin (k$)` = imports,
-          `Share from Origin (%)` = share_odpt,
-          starts_with("sect_"),
-          -sect_strategic
-        ) |>
-        arrange(desc(`Imports from Origin (k$)`))
-      
       return(result)
     }
-    
+
     iso1 <- selection[1]
     
     if (input$dep_direction == "import") {
@@ -1193,7 +1374,7 @@ server <- function(input, output, session) {
       }
       data <- data |> select(-starts_with("sect_"))
     }
-
+    
     front_cols <- c(
       "HS6 Product", 
       "Description", 
@@ -1206,13 +1387,16 @@ server <- function(input, output, session) {
     data <- data[, c(existing_front, remaining_cols), drop = FALSE]
     
     value_cols <- intersect(
-      c("Total Imports (World, k$)", "Total Exports (World, k$)", "Imports from Origin (k$)"),
+      c("Total Imports (World, k$)", "Total Exports (World, k$)", 
+        "Imports from Origin (k$)", "Exports to Destination (k$)"),
       colnames(data)
     )
-    share_col <- intersect("Share from Origin (%)", colnames(data))
+    share_col <- intersect(c("Share from Origin (%)", "Share to Destination (%)"), colnames(data))
     
     order_col <- if ("Imports from Origin (k$)" %in% colnames(data)) {
       "Imports from Origin (k$)"
+    } else if ("Exports to Destination (k$)" %in% colnames(data)) {
+      "Exports to Destination (k$)"
     } else {
       value_cols[1]
     }
@@ -1290,7 +1474,7 @@ server <- function(input, output, session) {
       
       csv_name  <- paste0(prefix, "_selection.csv")
       csv_path  <- file.path(tmp_dir, csv_name)
-
+      
       write_excel_csv2(filtered_dependency_data(), csv_path)
       included_ref_files <- copy_reference_files(tmp_dir)
       
