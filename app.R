@@ -937,10 +937,14 @@ server <- function(input, output, session) {
       group_by(hs6) |>
       summarise(is_dominant = any(is_dominant), .groups = "drop")
     
+    # Product-level totals (no double-counting across sectors), for the caption
+    total_dep      <- nrow(dominant_by_hs6)
+    total_dominant <- sum(dominant_by_hs6$is_dominant)
+    
     sectors_by_hs6 <- base |>
       distinct(hs6, across(all_of(sector_cols)))
     
-    dominant_by_hs6 |>
+    out <- dominant_by_hs6 |>
       left_join(sectors_by_hs6, by = "hs6") |>
       pivot_longer(cols = all_of(sector_cols), names_to = "sector_code", values_to = "flag") |>
       filter(flag == 1) |>
@@ -952,6 +956,10 @@ server <- function(input, output, session) {
         .groups    = "drop"
       ) |>
       mutate(share_dominant = if_else(n_dep > 0, 100 * n_dominant / n_dep, 0))
+    
+    attr(out, "total_dep")      <- total_dep
+    attr(out, "total_dominant") <- total_dominant
+    out
   })
   
   make_sector_chart <- function() {
@@ -967,6 +975,22 @@ server <- function(input, output, session) {
     flow_label       <- "Import"
     
     dominant_label <- if (!is.na(iso2)) paste0("Dominant: ", iso_display_name(iso2)) else "Other"
+    
+    total_dep      <- attr(df, "total_dep")
+    total_dominant <- attr(df, "total_dominant")
+    
+    subtitle_text <- if (!is.na(iso2)) {
+      paste0(
+        "Out of ", total_dep, " products for which ", iso_display_name(iso1),
+        " is import-dependent, there are ", total_dominant, " for which ",
+        iso_display_name(iso2), " is the leading exporter"
+      )
+    } else {
+      paste0(
+        "Out of ", total_dep, " products for which ", iso_display_name(iso1),
+        " is import-dependent"
+      )
+    }
     
     df_long <- df |>
       mutate(n_other = n_dep - n_dominant) |>
@@ -984,12 +1008,7 @@ server <- function(input, output, session) {
         x = NULL, 
         y = "Dependent products",
         title = paste0(flow_label, " dependencies by sector - ", iso_display_name(iso1), " (2024)"),
-        subtitle = if (!is.na(iso2)) {
-          paste0("Share of dependent products where ", iso_display_name(iso2),
-                 " is the leading ", direction_label, " (>50% of trade value)")
-        } else {
-          ""
-        },
+        subtitle = subtitle_text,
         fill = NULL,
         caption = "Source : GeoDep IFE-CEPII (2026)"
       ) +
@@ -1048,15 +1067,17 @@ server <- function(input, output, session) {
     filename = function() {
       selection <- selected_countries()
       req(length(selection) >= 1)
-      iso1 <- selection[1]
-      paste0("GeoDep_partner_sector_chart_", iso1, "_2024.png")
+      iso1      <- selection[1]
+      direction <- input$dep_direction
+      paste0("GeoDep_partner_chart_", direction, "_", iso1, "_2024.png")
     },
     content = function(file) {
       selection <- selected_countries()
       req(length(selection) >= 1)
-      iso1 <- selection[1]
+      iso1      <- selection[1]
+      direction <- input$dep_direction
       
-      p <- tryCatch(make_partner_sector_chart(iso1), error = function(e) NULL)
+      p <- tryCatch(make_partner_sector_chart(iso1, direction), error = function(e) NULL)
       req(p)
       
       ggsave(filename = file, plot = p, device = "png",
@@ -1064,11 +1085,14 @@ server <- function(input, output, session) {
     }
   )
   
-  partner_sector_chart_data <- function(iso1) {
-    sector_cols <- setdiff(unlist(sector_choices_ui, use.names = FALSE),
-                           c("all", "sect_strategic", "sect_other"))
-
-    base <- imports_final |> filter(iso_d == iso1)
+  partner_sector_chart_data <- function(iso1, direction = "import") {
+    if (direction == "import") {
+      base        <- imports_final |> filter(iso_d == iso1)
+      partner_col <- "first_odpt"
+    } else {
+      base        <- exports_final |> filter(iso_o == iso1)
+      partner_col <- "first_dpto"
+    }
     
     if ("dependent" %in% names(base)) {
       base <- base |> filter(dependent == 1)
@@ -1076,48 +1100,32 @@ server <- function(input, output, session) {
     
     if (nrow(base) == 0) return(NULL)
     
-    avail_sector_cols <- intersect(sector_cols, names(base))
-    if (length(avail_sector_cols) == 0) return(NULL)
-    
-    df0 <- base |>
-      distinct(hs6, first_odpt, across(all_of(avail_sector_cols)))
+    df0 <- base |> distinct(hs6, partner = .data[[partner_col]])
     
     top3_partners <- df0 |>
-      count(first_odpt, sort = TRUE, name = "n_products") |>
+      count(partner, sort = TRUE, name = "n_products") |>
       slice_head(n = 3) |>
-      pull(first_odpt)
+      pull(partner)
     
     if (length(top3_partners) == 0) return(NULL)
     
     partner_labels <- iso_display_name(top3_partners)
     
     df <- df0 |>
-      pivot_longer(cols = all_of(avail_sector_cols), names_to = "sector_code", values_to = "flag") |>
-      filter(flag == 1) |>
-      mutate(
-        Sector_Name   = unlist(sector_names[sector_code]),
-        partner_group = if_else(first_odpt %in% top3_partners,
-                                iso_display_name(first_odpt), "ROW")
-      ) |>
-      count(Sector_Name, partner_group, name = "n_dep")
+      mutate(partner_group = if_else(partner %in% top3_partners,
+                                     iso_display_name(partner), "ROW")) |>
+      count(partner_group, name = "n_dep")
     
     if (nrow(df) == 0) return(NULL)
     
     df |>
-      mutate(partner_group = factor(partner_group, levels = c(partner_labels, "ROW")))
+      mutate(partner_group = factor(partner_group, levels = c(partner_labels, "ROW"))) |>
+      arrange(partner_group)
   }
   
-  make_partner_sector_chart <- function(iso1) {
-    df <- partner_sector_chart_data(iso1)
+  make_partner_sector_chart <- function(iso1, direction = "import") {
+    df <- partner_sector_chart_data(iso1, direction)
     if (is.null(df) || nrow(df) == 0) return(NULL)
-    
-    sector_order <- df |>
-      group_by(Sector_Name) |>
-      summarise(total = sum(n_dep), .groups = "drop") |>
-      arrange(total) |>
-      pull(Sector_Name)
-    
-    df <- df |> mutate(Sector_Name = factor(Sector_Name, levels = sector_order))
     
     partner_levels <- levels(df$partner_group)
     n_partners     <- length(partner_levels) - 1
@@ -1125,25 +1133,36 @@ server <- function(input, output, session) {
     fill_colors    <- setNames(base_colors[seq_len(n_partners)], partner_levels[seq_len(n_partners)])
     fill_colors    <- c(fill_colors, "ROW" = "#b0b0b0")
     
-    ggplot(df, aes(x = Sector_Name, y = n_dep, fill = partner_group)) +
-      geom_col(width = 0.7, color = "white", linewidth = 0.4) +
+    total_dep <- sum(df$n_dep)
+    
+    role_label   <- if (direction == "import") "import-dependent" else "export-dependent"
+    partner_role <- if (direction == "import") "leading exporter" else "leading destination"
+    
+    subtitle_text <- paste0(
+      "Out of ", total_dep, " products for which ", iso_display_name(iso1),
+      " is ", role_label, ", breakdown by ", partner_role
+    )
+    
+    ggplot(df, aes(x = partner_group, y = n_dep, fill = partner_group)) +
+      geom_col(width = 0.6, color = "white", linewidth = 0.4) +
+      geom_text(aes(label = n_dep), vjust = -0.5, size = 4, fontface = "bold", color = "#2b2b2b") +
       labs(
-        x = NULL, y = "Nber of dependent HS6 products",
+        x = NULL, y = "Number of dependent HS6 products",
         title = iso_display_name(iso1),
-        fill = NULL,
+        subtitle = subtitle_text,
         caption = "Source : GeoDep IFE-CEPII (2026)"
       ) +
-      scale_fill_manual(values = fill_colors) +
+      scale_fill_manual(values = fill_colors, guide = "none") +
+      expand_limits(y = max(df$n_dep) * 1.15) +
       theme_minimal(base_size = 12) +
       theme(
         plot.title          = element_text(face = "bold", hjust = 0.5, size = 15, color = "#2b2b2b"),
+        plot.subtitle       = element_text(hjust = 0.5, size = 10, color = "#666666", margin = margin(b = 10)),
         plot.caption        = element_text(hjust = 1, size = 9, color = "#888888", face = "italic"),
         panel.grid.major.x  = element_blank(),
         panel.grid.minor    = element_blank(),
         panel.grid.major.y  = element_line(color = "#e5e5e5", linewidth = 0.5, linetype = "dashed"),
-        axis.text.x         = element_text(face = "bold", color = "#333333", size = 10, angle = 20, hjust = 1),
-        legend.position     = "bottom",
-        legend.text         = element_text(size = 10)
+        axis.text.x         = element_text(face = "bold", color = "#333333", size = 11)
       )
   }
   
@@ -1186,7 +1205,7 @@ server <- function(input, output, session) {
         local({
           iso_local <- iso1
           output[[plot_id]] <- renderPlot({
-            p <- tryCatch(make_partner_sector_chart(iso_local),
+            p <- tryCatch(make_partner_sector_chart(iso_local, "import"),
                           error = function(e) NULL)
             req(p)
             p
@@ -1232,42 +1251,51 @@ server <- function(input, output, session) {
       }
       
     } else {
-      make_card_ui <- function(idx) {
-        iso <- selection[idx]
-        row <- tryCatch(export_hover_data() |> filter(iso_plot == iso),
-                        error = function(e) NULL)
-        export_txt <- if (is.null(row) || nrow(row) == 0 || is.na(row$export_top3[1])) {
-          "None identified"
-        } else {
-          row$export_top3[1]
-        }
+      
+      make_export_plot_panel <- function(idx, plot_id, with_download = FALSE) {
+        iso_local <- selection[idx]
         
-        wellPanel(
-          h4(iso_display_name(iso)),
-          tags$p(tags$em("Depends on for exports (top destinations):")),
-          tags$p(export_txt)
+        local({
+          iso_fixed <- iso_local
+          output[[plot_id]] <- renderPlot({
+            p <- tryCatch(make_partner_sector_chart(iso_fixed, "export"),
+                          error = function(e) NULL)
+            req(p)
+            p
+          })
+        })
+        
+        div(style = "flex: 1; min-width: 0; display: flex; flex-direction: column;",
+            plotOutput(plot_id, height = "320px"),
+            if (with_download) {
+              div(style = "text-align: right; margin-top: auto; padding-top: 10px;",
+                  downloadButton("download_partner_plot", "Download Graph (PNG)",
+                                 style = "background-color: #6c7a76; color: white; border: none;")
+              )
+            }
         )
       }
       
-      cards <- tryCatch({
+      charts <- tryCatch({
         if (length(selection) == 1) {
-          fluidRow(column(12, make_card_ui(1)))
+          div(style = "display: flex;",
+              make_export_plot_panel(1, "partner_export_plot_1", with_download = TRUE)
+          )
         } else {
-          fluidRow(
-            column(12, make_card_ui(1)),
-            column(12, make_card_ui(2))
+          div(style = "display: flex; gap: 24px; align-items: stretch;",
+              make_export_plot_panel(1, "partner_export_plot_1", with_download = TRUE)
           )
         }
       }, error = function(e) {
-        div(class = "well", "Unable to display the partner breakdown for this selection.")
+        div("Unable to display the partner breakdown for this selection.")
       })
       
       info_msg <- div(
-        style = "padding: 14px 18px; background-color: #f4f8f6; border: 1px solid #cfe0da; border-left: 5px solid #8b3a3a; border-radius: 4px; color: #666; font-style: italic;",
+        style = "padding: 14px 18px; background-color: #f4f8f6; border: 1px solid #cfe0da; border-left: 5px solid #8b3a3a; border-radius: 4px; color: #666; font-style: italic; margin-top: 16px;",
         "Sector breakdown is only available for Import dependencies (GeoDep_M). Export dependencies (GeoDep_X) are not sector-tagged."
       )
       
-      tagList(cards, info_msg)
+      div(class = "well", charts, info_msg)
     }
   })
   

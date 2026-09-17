@@ -45,10 +45,7 @@ imports_final <- read_dta("1_Data/geodep_M_hs22.dta") |>
     )
 ```
 
-`GeoDep_M.dta` is one row per (importer, HS6): it carries the destination's
-total import value (`import_dpt`), the four dependency criteria (`c1_M`
-to `c4_M`), the `dependent` flag, the identity/share of the *leading*
-supplier (`first_odpt`, `share_odpt`), and the `sect_*` flags.
+`GeoDep_M.dta` is one row per (importer, HS6): it carries the destination's total import value (`import_dpt`), the four dependency criteria (`c1_M` to `c4_M`), the `dependent` flag, the identity/share of the *leading* supplier (`first_odpt`, `share_odpt`), and the `sect_*` flags.
 
 ## 2. Exports (GeoDep_X)
 
@@ -59,10 +56,7 @@ exports_final <- read_dta("1_Data/geodep_X_hs22.dta") |>
   select(-Classification,-`Parent Code`, -Level,-IsBasicLevel)
 ```
 
-`GeoDep_X.dta` is the symmetric export-side table: one row per (exporter,
-HS6), with `export_opt`, `c1_X` to `c4_X`, `dependent`, and the leading
-destination's identity/share (`first_dpto`, `share_dpto`). No sector
-columns.
+`GeoDep_X.dta` is the symmetric export-side table: one row per (exporter, HS6), with `export_opt`, `c1_X` to `c4_X`, `dependent`, and the leading destination's identity/share (`first_dpto`, `share_dpto`). No sector columns.
 
 ## 3. Descriptive-stats precomputation
 
@@ -142,7 +136,7 @@ dep_import_base <- imports_final |>
     imports = import_dpt * share_odpt / 100
   ) |>
   select(iso_d, iso_o, hs6, imports, import_dpt,
-         Description, starts_with("sect_"))
+         Description, starts_with("sect_"), first_odpt)
 
 dep_export_base <- exports_final |>
   filter(dependent == 1) |>
@@ -151,7 +145,7 @@ dep_export_base <- exports_final |>
     iso_d   = to_eun(first_dpto),
     imports = export_opt * share_dpto / 100
   ) |>
-  select(iso_o, iso_d, hs6, Description, imports, export_opt)
+  select(iso_o, iso_d, hs6, Description, imports, export_opt, first_dpto)
 
 traded_by_country <- imports_final |>
   mutate(iso_d = to_eun(iso_d)) |>
@@ -171,6 +165,7 @@ imports_sector_long_all <- imports_final |>
   filter(is_in_sector == 1) |>
   mutate(Sector_Name = sector_names[Sector])
 ```
+
 ```{r}
 
 trade_isos <- c(
