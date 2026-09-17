@@ -54,7 +54,9 @@ supplier (`first_odpt`, `share_odpt`), and the `sect_*` flags.
 
 ```{r}
 exports_final <- read_dta("1_Data/geodep_X_hs22.dta") |>
-  filter(year == DEP_YEAR)
+  filter(year == DEP_YEAR) |>
+  left_join(hs6_description, by = "hs6") |>
+  select(-Classification,-`Parent Code`, -Level,-IsBasicLevel)
 ```
 
 `GeoDep_X.dta` is the symmetric export-side table: one row per (exporter,
@@ -147,9 +149,9 @@ dep_export_base <- exports_final |>
   mutate(
     iso_o   = to_eun(iso_o),
     iso_d   = to_eun(first_dpto),
-    imports = export_opt * share_dpto / 100   # kept as "imports" to match app's shared column name
+    imports = export_opt * share_dpto / 100
   ) |>
-  select(iso_o, iso_d, hs6, imports, export_opt)
+  select(iso_o, iso_d, hs6, Description, imports, export_opt)
 
 traded_by_country <- imports_final |>
   mutate(iso_d = to_eun(iso_d)) |>

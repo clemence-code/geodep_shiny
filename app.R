@@ -809,7 +809,7 @@ server <- function(input, output, session) {
     }
     
     pal <- colorNumeric(
-      palette  = "plasma",
+      palette  = "RdYlGn",
       domain   = fill_values,
       reverse  = TRUE,
       na.color = "lightgrey"
