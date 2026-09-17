@@ -1358,10 +1358,14 @@ server <- function(input, output, session) {
       base        <- dep_import_base |> filter(iso_d == iso1)
       total_col   <- "import_dpt"
       total_label <- "Total Imports (World, k$)"
+      partner_label  <- "First exporter"
+      partner_col <- "first_odpt"
     } else {
       base        <- dep_export_base |> filter(iso_o == iso1)
       total_col   <- "export_opt"
       total_label <- "Total Exports (World, k$)"
+      partner_label  <- "First destination"
+      partner_col <- "first_dpto"
     }
     
     if (input$sector_filter != "all" && input$sector_filter %in% names(base)) {
@@ -1376,7 +1380,8 @@ server <- function(input, output, session) {
     optional_cols <- setdiff(optional_cols, "sect_strategic")
     
     result <- base |>
-      distinct(across(all_of(c("hs6", total_col, optional_cols)))) |>
+      mutate(!!partner_label := iso_display_name(.data[[partner_col]])) |>
+      distinct(across(all_of(c("hs6", total_col, partner_label, optional_cols)))) |>
       arrange(desc(.data[[total_col]]))
     
     colnames(result)[colnames(result) == "hs6"]      <- "HS6 Product"
@@ -1407,6 +1412,8 @@ server <- function(input, output, session) {
       "HS6 Product", 
       "Description", 
       "Sector", 
+      "First exporter",
+      "First destination",
       "Total Imports (World, k$)", 
       "Total Exports (World, k$)"
     )
