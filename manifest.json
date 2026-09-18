@@ -3301,13 +3301,16 @@
       "checksum": "8716e9fcef9941a68c042cd219cd1422"
     },
     "app.R": {
-      "checksum": "87d965439ef662f3dbfd39655f1f14a8"
+      "checksum": "87dc51dda1f9f51aee6702ee3eeca0f7"
     },
     "preparation.qmd": {
       "checksum": "72a4268e2c11588b9b78c2dddca9f3d6"
     },
     "README.md": {
       "checksum": "a0bc22e3364c865de4601c866c8334b7"
+    },
+    "www/IFE2-Logo.png": {
+      "checksum": "0378383fe244fecafd2f0a0e65530636"
     }
   },
   "users": null
