@@ -233,12 +233,21 @@ ui <- fluidPage(
         padding: 28px 34px;
         margin: -10px -30px 30px -30px;
         border-bottom: 4px solid #8b3a3a;
+        display: flex;
+        align-items: center;
+        gap: 20px;
       }
+      
       .title-banner h1 {
         margin: 0;
         font-size: 30px;
         font-weight: 700;
         letter-spacing: 0.5px;
+      }
+      
+      .banner-logo {
+        height: 80px;
+        width: auto;
       }
 
       .intro-text {
@@ -452,7 +461,8 @@ ui <- fluidPage(
   ),
   
   div(class = "title-banner",
-      h1("GeoDep \u2014 Trade Dependencies")
+      tags$img(src = "IFE2-logo.png", class = "banner-logo"),
+      h1("GeoDep — Trade Dependencies")
   ),
   
   div(class = "intro-text",
