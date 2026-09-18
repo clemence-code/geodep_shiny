@@ -1001,21 +1001,26 @@ server <- function(input, output, session) {
     sector_order <- df |> arrange(n_dep) |> pull(Sector_Name)
     df_long <- df_long |> mutate(Sector_Name = factor(Sector_Name, levels = sector_order))
     
+    title_text <- paste0(flow_label, " dependencies by sector - ", iso_display_name(iso1), " (2024)")
+    title_text <- paste(strwrap(title_text, width = 38), collapse = "\n")
+    
+    
     p <- ggplot(df_long, aes(x = Sector_Name, y = n, fill = category)) +
       geom_col(width = 0.75, color = "white", linewidth = 0.4) +
       coord_flip() +
       labs(
         x = NULL, 
         y = "Dependent products",
-        title = paste0(flow_label, " dependencies by sector - ", iso_display_name(iso1), " (2024)"),
+        title = title_text,
         subtitle = subtitle_text,
         fill = NULL,
         caption = "Source : GeoDep IFE-CEPII (2026)"
       ) +
       theme_minimal(base_size = 12) +
       theme(
-        plot.title    = element_text(face = "bold", size = 15, color = "#2b2b2b", margin = margin(b = 6)),
-        plot.subtitle = element_text(size = 11, color = "#666666", margin = margin(b = 15)),
+        plot.title    = element_text(face = "bold", size = 15, color = "#2b2b2b",
+                                     hjust = 0.5, lineheight = 1.15, margin = margin(b = 6)),
+        plot.subtitle = element_text(size = 11, color = "#666666", hjust = 0.5, margin = margin(b = 15)),
         plot.caption  = element_text(hjust = 1, size = 9, color = "#888888", face = "italic", margin = margin(t = 15)),
         
         panel.grid.major.y = element_blank(),
@@ -1109,11 +1114,11 @@ server <- function(input, output, session) {
     
     if (length(top3_partners) == 0) return(NULL)
     
-    partner_labels <- iso_display_name(top3_partners)
+    partner_labels <- top3_partners
     
     df <- df0 |>
       mutate(partner_group = if_else(partner %in% top3_partners,
-                                     iso_display_name(partner), "ROW")) |>
+                                     partner, "ROW")) |>
       count(partner_group, name = "n_dep")
     
     if (nrow(df) == 0) return(NULL)
@@ -1138,9 +1143,15 @@ server <- function(input, output, session) {
     role_label   <- if (direction == "import") "import-dependent" else "export-dependent"
     partner_role <- if (direction == "import") "leading exporter" else "leading destination"
     
+    shown_isos   <- setdiff(partner_levels, "ROW")
+    legend_pairs <- c(paste0(shown_isos, " = ", iso_name(shown_isos)),
+                      "ROW = Rest of the World")
+    legend_text  <- paste(legend_pairs, collapse = "  \u2022  ")
+    
     subtitle_text <- paste0(
       "Out of ", total_dep, " products for which ", iso_display_name(iso1),
-      " is ", role_label, ", breakdown by ", partner_role
+      " is ", role_label, ", breakdown by ", partner_role,
+      "\n", legend_text
     )
     
     ggplot(df, aes(x = partner_group, y = n_dep, fill = partner_group)) +
@@ -1148,16 +1159,17 @@ server <- function(input, output, session) {
       geom_text(aes(label = n_dep), vjust = -0.5, size = 4, fontface = "bold", color = "#2b2b2b") +
       labs(
         x = NULL, y = "Number of dependent HS6 products",
-        title = iso_display_name(iso1),
+        title    = iso_name(iso1),
         subtitle = subtitle_text,
-        caption = "Source : GeoDep IFE-CEPII (2026)"
+        caption  = "Source : GeoDep IFE-CEPII (2026)"
       ) +
       scale_fill_manual(values = fill_colors, guide = "none") +
       expand_limits(y = max(df$n_dep) * 1.15) +
       theme_minimal(base_size = 12) +
       theme(
         plot.title          = element_text(face = "bold", hjust = 0.5, size = 15, color = "#2b2b2b"),
-        plot.subtitle       = element_text(hjust = 0.5, size = 10, color = "#666666", margin = margin(b = 10)),
+        plot.subtitle       = element_text(hjust = 0.5, size = 10, color = "#666666",
+                                           margin = margin(b = 10), lineheight = 1.3),
         plot.caption        = element_text(hjust = 1, size = 9, color = "#888888", face = "italic"),
         panel.grid.major.x  = element_blank(),
         panel.grid.minor    = element_blank(),
@@ -1217,7 +1229,7 @@ server <- function(input, output, session) {
               div(style = "display: flex; gap: 24px; align-items: stretch;",
                   div(style = "flex: 1; min-width: 0; display: flex; flex-direction: column;",
                       div(style = "min-height: 68px;",
-                          h4(iso_display_name(iso1))
+                          h4(iso_name(iso1))
                       ),
                       plotOutput(plot_id, height = "320px"),
                       div(style = "text-align: right; margin-top: auto; padding-top: 10px;",
