@@ -13,7 +13,7 @@ library(DT)
 library(sf)
 library(readr)
 library(zip)
-
+library(ggtext)
 here::i_am('geodep_shiny.Rproj')
 
 ## -----------------------------------------------------------------------
@@ -261,6 +261,14 @@ ui <- fluidPage(
         margin-bottom: 20px;
       }
 
+      h3.table-heading {
+        border-bottom: none;
+        padding-bottom: 0;
+        margin-top: 30px;
+        margin-bottom: 12px;
+        font-size: 18px;
+        font-weight: 600;
+      }
       label {
         color: #1f6f5c;
         font-weight: 600;
@@ -1146,12 +1154,13 @@ server <- function(input, output, session) {
     shown_isos   <- setdiff(partner_levels, "ROW")
     legend_pairs <- c(paste0(shown_isos, " = ", iso_name(shown_isos)),
                       "ROW = Rest of the World")
-    legend_text  <- paste(legend_pairs, collapse = "  \u2022  ")
+    legend_text  <- paste(legend_pairs, collapse = ", ")
+    legend_text  <- paste(strwrap(legend_text, width = 80), collapse = "<br>")
     
     subtitle_text <- paste0(
-      "Out of ", total_dep, " products for which ", iso_display_name(iso1),
-      " is ", role_label, ", breakdown by ", partner_role,
-      "\n", legend_text
+      "**Out of ", total_dep, " products for which ", iso_display_name(iso1),
+      " is ", role_label, ", breakdown by ", partner_role, "**",
+      "<br>", legend_text
     )
     
     ggplot(df, aes(x = partner_group, y = n_dep, fill = partner_group)) +
@@ -1168,8 +1177,8 @@ server <- function(input, output, session) {
       theme_minimal(base_size = 12) +
       theme(
         plot.title          = element_text(face = "bold", hjust = 0.5, size = 15, color = "#2b2b2b"),
-        plot.subtitle       = element_text(hjust = 0.5, size = 10, color = "#666666",
-                                           margin = margin(b = 10), lineheight = 1.3),
+        plot.subtitle       = ggtext::element_markdown(hjust = 0.5, size = 10, color = "#666666",
+                                                       margin = margin(b = 14), lineheight = 1.3),
         plot.caption        = element_text(hjust = 1, size = 9, color = "#888888", face = "italic"),
         panel.grid.major.x  = element_blank(),
         panel.grid.minor    = element_blank(),
@@ -1187,9 +1196,9 @@ server <- function(input, output, session) {
     
     if (length(selection) == 1) {
       title_text <- if (direction == "import") {
-        paste0("Products for which ", iso1_name, " is import-dependent")
+        paste0("Products for which ", iso1_name, " is import-dependent :")
       } else {
-        paste0("Products for which ", iso1_name, " is export-dependent")
+        paste0("Products for which ", iso1_name, " is export-dependent :")
       }
     } else {
       iso2_name <- iso_display_name(selection[2])
@@ -1199,7 +1208,7 @@ server <- function(input, output, session) {
         paste0("Products for which ", iso1_name, " is export-dependent and ", iso2_name, " is the first destination")
       }
     }
-    h3(title_text)
+    h3(class = "table-heading", title_text)   # added class
   })
   
   output$partners_panel <- renderUI({
@@ -1392,7 +1401,7 @@ server <- function(input, output, session) {
     optional_cols <- setdiff(optional_cols, "sect_strategic")
     
     result <- base |>
-      mutate(!!partner_label := iso_display_name(.data[[partner_col]])) |>
+      mutate(!!partner_label := iso_name(.data[[partner_col]])) |>
       distinct(across(all_of(c("hs6", total_col, partner_label, optional_cols)))) |>
       arrange(desc(.data[[total_col]]))
     
