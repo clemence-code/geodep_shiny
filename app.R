@@ -461,7 +461,7 @@ ui <- fluidPage(
   ),
   
   div(class = "title-banner",
-      tags$img(src = "IFE2-logo.png", class = "banner-logo"),
+      tags$img(src = "IFE2-Logo.png", class = "banner-logo"),
       h1("GeoDep — Trade Dependencies")
   ),
   
