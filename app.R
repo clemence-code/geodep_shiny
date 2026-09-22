@@ -49,8 +49,7 @@ sector_choices_ui <- list(
     "\u2003Health"                 = "sect_health",
     "\u2003Agrifood"               = "sect_agrifood",
     "\u2003Energy"                 = "sect_energy"
-  ),
-  "Other" = c("Other" = "sect_other")
+  )
 )
 
 ## -----------------------------------------------------------------------
