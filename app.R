@@ -233,9 +233,10 @@ ui <- fluidPage(
         padding: 28px 34px;
         margin: -10px -30px 30px -30px;
         border-bottom: 4px solid #8b3a3a;
-        display: flex;
+        display: grid;
+        grid-template-columns: auto 1fr auto; 
         align-items: center;
-        gap: 20px;
+        column-gap: 20px;
       }
       
       .title-banner h1 {
@@ -243,11 +244,25 @@ ui <- fluidPage(
         font-size: 30px;
         font-weight: 700;
         letter-spacing: 0.5px;
+        text-align: center;
+        grid-column: 2;
       }
       
       .banner-logo {
         height: 80px;
+        width: auto;     
+        display: block;     
+        grid-column: 1;
+        justify-self: start;
+      }
+      
+      .banner-logo-spacer {
+        height: 80px;
         width: auto;
+        display: block;
+        grid-column: 3;
+        justify-self: end;
+        visibility: hidden;   
       }
 
       .intro-text {
@@ -453,20 +468,33 @@ ui <- fluidPage(
           min-height: 0;
           margin-bottom: 20px;
         }
+        .title-banner {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          row-gap: 12px;
+          text-align: center;
+        }
+        .banner-logo {
+          height: 60px;
+        }
+        .banner-logo-spacer {
+          display: none;     
+        }
         .title-banner h1 {
-          font-size: 24px;
+          font-size: 22px;
         }
       }
     "))
   ),
   
   div(class = "title-banner",
-      tags$img(src = "IFE2-Logo.png", class = "banner-logo"),
-      h1("GeoDep — Trade Dependencies")
+      tags$img(src = "IFE2-Logo-B.png", class = "banner-logo"),
+      h1("GeoDep — Trade Dependencies"),
+      tags$img(src = "IFE2-Logo-B.png", class = "banner-logo-spacer", `aria-hidden` = "true")
   ),
   
   div(class = "intro-text",
-      p("Click a country on the map to select it as the Importer (Destination); click a second country to select it as the Exporter (Origin). You can also search by name below. Click a third time on the map, or use Reset, to start over. EU-27 member states are treated as a single entity (EUN).")
+      p("Click a country on the map to select it as the Importer (Destination); click a second country to select it as the Exporter (Origin). You can also search by name below. EU-27 member states are treated as a single entity (EUN).")
   ),
   
   div(class = "app-layout",
