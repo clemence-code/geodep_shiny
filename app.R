@@ -1052,6 +1052,11 @@ server <- function(input, output, session) {
     
     p <- ggplot(df_long, aes(x = Sector_Name, y = n, fill = category)) +
       geom_col(width = 0.75, color = "white", linewidth = 0.4) +
+      geom_text(
+        aes(label = ifelse(n > 0, n, "")),
+        position = position_stack(vjust = 0.5),
+        color = "white", fontface = "bold", size = 3.3
+      ) +
       coord_flip() +
       labs(
         x = NULL, 
