@@ -14,6 +14,8 @@ library(sf)
 library(readr)
 library(zip)
 library(ggtext)
+library(treemapify)
+library(shinycssloaders)
 here::i_am('geodep_shiny.Rproj')
 
 ## -----------------------------------------------------------------------
@@ -24,8 +26,8 @@ geodep_inputs <- readRDS("1_Data/geodep_shiny_inputs.rds")
 
 DEP_YEAR                  <- geodep_inputs$DEP_YEAR
 eu_countries               <- geodep_inputs$eu_countries
-sector_names                <- geodep_inputs$sector_names
-sector_choices                <- geodep_inputs$sector_choices
+sector_names               <- geodep_inputs$sector_names
+sector_choices               <- geodep_inputs$sector_choices
 world_polygons                  <- geodep_inputs$world_polygons
 iso_name_lookup                   <- geodep_inputs$iso_name_lookup
 country_choices                     <- geodep_inputs$country_choices
@@ -458,6 +460,21 @@ ui <- fluidPage(
       .sidebar-actions .btn {
         flex: 1;
       }
+      .irs-bar {
+        background-color: #1f6f5c !important;
+        border-top: 1px solid #1f6f5c !important;
+        border-bottom: 1px solid #1f6f5c !important;
+      }
+      .irs-bar-edge {
+        background-color: #1f6f5c !important;
+        border: 1px solid #1f6f5c !important;
+      }
+      .irs-single, .irs-to, .irs-from {
+        background-color: #1f6f5c !important;
+      }
+      .irs-single:after, .irs-to:after, .irs-from:after {
+        border-top-color: #1f6f5c !important;
+      }
 
       @media (max-width: 768px) {
         .app-layout {
@@ -531,6 +548,13 @@ ui <- fluidPage(
                              options = list(placeholder = "Type a country name..."),
                              width = "100%")
           ),
+          div(class = "sidebar-section",
+              conditionalPanel(
+                condition = "(input.importer_select !== '' && input.exporter_select === '') || (input.importer_select === '' && input.exporter_select !== '')",
+                sliderInput("top_n_slider", "Top Partners in Treemap:", 
+                            min = 3, max = 20, value = 10, step = 1, width = "100%")
+              )
+          ),
           div(class = "sidebar-section sidebar-actions",
               actionButton("reset_button", "Reset selection"),
               actionButton("info_button", "\u2139 Methodology")
@@ -548,13 +572,20 @@ ui <- fluidPage(
       ),
       
       div(class = "main-panel",
-          leafletOutput("dependency_map", height = "650px"),
+          withSpinner(
+            leafletOutput("dependency_map", height = "650px"), 
+            type = 8, color = "#1f6f5c", size = 1.5
+          ),
           
           div(class = "section-block",
               uiOutput("partners_panel"),
               hr(),
               uiOutput("table_heading"),
-              DTOutput("dependency_table")
+              # 2. Add spinner to the datatable
+              withSpinner(
+                DTOutput("dependency_table"), 
+                type = 8, color = "#1f6f5c", size = 1
+              )
           )
       )
   )
@@ -649,7 +680,7 @@ server <- function(input, output, session) {
     p_sel <- prev_sel()
     p_imp <- if (length(p_sel) >= 1) p_sel[1] else ""
     p_exp <- if (length(p_sel) >= 2) p_sel[2] else ""
-
+    
     changed_imp <- !identical(imp, p_imp)
     changed_exp <- !identical(exp, p_exp)
     
@@ -682,7 +713,7 @@ server <- function(input, output, session) {
     new_imp <- input$importer_select
     new_sel <- c(new_imp, if (length(cur) >= 2) cur[2] else NA)
     new_sel <- new_sel[!is.na(new_sel) & new_sel != ""]
-
+    
     if (!identical(new_sel, cur)) {
       selected_countries(new_sel)
     }
@@ -693,7 +724,7 @@ server <- function(input, output, session) {
     imp <- if (length(cur) >= 1) cur[1] else NA
     new_sel <- c(imp, input$exporter_select)
     new_sel <- new_sel[!is.na(new_sel) & new_sel != ""]
-
+    
     if (!identical(new_sel, cur)) {
       selected_countries(new_sel)
     }
@@ -735,7 +766,7 @@ server <- function(input, output, session) {
       ) |>
       select(iso_plot, count_share, value_share, n_dep, n_total, dep_value, total_value)
   }) |> bindCache(input$sector_filter, input$dep_direction)
-
+  
   export_hover_data <- reactive({
     export_base <- dep_export_base
     
@@ -865,7 +896,7 @@ server <- function(input, output, session) {
              setTimeout(function() { map.invalidateSize(); }, 300);
            });
          }"
-            )
+      )
   })
   
   observe({
@@ -1013,13 +1044,13 @@ server <- function(input, output, session) {
     dominant_by_hs6 <- base |>
       group_by(hs6) |>
       summarise(is_dominant = any(is_dominant), .groups = "drop")
-
+    
     total_dep      <- nrow(dominant_by_hs6)
     total_dominant <- sum(dominant_by_hs6$is_dominant)
     
     sectors_by_hs6 <- base |>
       distinct(hs6, across(all_of(sector_cols)))
-
+    
     strategic_hs6 <- sectors_by_hs6 |>
       filter(if_any(all_of(sector_cols), ~ .x == 1)) |>
       pull(hs6)
@@ -1063,7 +1094,7 @@ server <- function(input, output, session) {
     
     total_dep      <- attr(df, "total_dep")
     total_dominant <- attr(df, "total_dominant")
-    total_strategic          <- attr(df, "total_strategic")           
+    total_strategic          <- attr(df, "total_strategic")            
     total_dominant_strategic <- attr(df, "total_dominant_strategic")  
     
     subtitle_text <- if (!is.na(iso2)) {
@@ -1109,14 +1140,15 @@ server <- function(input, output, session) {
         title = title_text,
         subtitle = subtitle_text,
         fill = NULL,
-        caption = "Source : GeoDep IFE-CEPII (2026)\nNote: sectors are not mutually exclusive"
+        caption = "Source : GeoDep IFE-CEPII (2026)  •  Note: sectors are not mutually exclusive, a product can belong to more than one sector"
       ) +
       theme_minimal(base_size = 12) +
       theme(
         plot.title    = element_text(face = "bold", size = 15, color = "#2b2b2b",
                                      hjust = 0.5, lineheight = 1.15, margin = margin(b = 6)),
         plot.subtitle = element_text(size = 11, color = "#666666", hjust = 0.5, margin = margin(b = 15)),
-        plot.caption  = element_text(hjust = 1, size = 9, color = "#888888", face = "italic", margin = margin(t = 15)),
+        plot.caption  = element_text(hjust = 0.5, size = 8.5, color = "#888888", face = "italic",
+                                     margin = margin(t = 14)),
         
         panel.grid.major.y = element_blank(),
         panel.grid.minor   = element_blank(),
@@ -1126,9 +1158,9 @@ server <- function(input, output, session) {
         axis.text.x   = element_text(color = "#555555"),
         axis.title.x  = element_text(color = "#444444", margin = margin(t = 12)),
         
-        legend.position      = "top",
-        legend.justification = "left",
-        legend.margin        = margin(b = -5),
+        legend.position      = "bottom",
+        legend.justification = "center",
+        legend.margin        = margin(t = 4, b = 0),
         legend.text          = element_text(size = 11, color = "#333333")
       )
     if (!is.na(iso2)) {
@@ -1177,7 +1209,7 @@ server <- function(input, output, session) {
       iso1      <- selection[1]
       direction <- input$dep_direction
       
-      p <- tryCatch(make_partner_sector_chart(iso1, direction), error = function(e) NULL)
+      p <- tryCatch(make_partner_sector_chart(iso1, direction, input$top_n_slider), error = function(e) NULL)
       req(p)
       
       ggsave(filename = file, plot = p, device = "png",
@@ -1185,7 +1217,7 @@ server <- function(input, output, session) {
     }
   )
   
-  partner_sector_chart_data <- function(iso1, direction = "import") {
+  partner_sector_chart_data <- function(iso1, direction = "import", top_n = 10) {
     if (direction == "import") {
       base        <- imports_final |> filter(iso_d == iso1)
       partner_col <- "first_odpt"
@@ -1202,17 +1234,17 @@ server <- function(input, output, session) {
     
     df0 <- base |> distinct(hs6, partner = .data[[partner_col]])
     
-    top3_partners <- df0 |>
+    topN_partners <- df0 |>
       count(partner, sort = TRUE, name = "n_products") |>
-      slice_head(n = 3) |>
+      slice_head(n = top_n) |>
       pull(partner)
     
-    if (length(top3_partners) == 0) return(NULL)
+    if (length(topN_partners) == 0) return(NULL)
     
-    partner_labels <- top3_partners
+    partner_labels <- topN_partners
     
     df <- df0 |>
-      mutate(partner_group = if_else(partner %in% top3_partners,
+      mutate(partner_group = if_else(partner %in% topN_partners,
                                      partner, "ROW")) |>
       count(partner_group, name = "n_dep")
     
@@ -1223,21 +1255,29 @@ server <- function(input, output, session) {
       arrange(partner_group)
   }
   
-  make_partner_sector_chart <- function(iso1, direction = "import") {
-    df <- partner_sector_chart_data(iso1, direction)
+  make_partner_sector_chart <- function(iso1, direction = "import", top_n = 10) {
+    df <- partner_sector_chart_data(iso1, direction, top_n)
     if (is.null(df) || nrow(df) == 0) return(NULL)
     
     partner_levels <- levels(df$partner_group)
     n_partners     <- length(partner_levels) - 1
-    base_colors    <- c("#1f6f5c", "#8b3a3a", "#4a7c9e")
-    fill_colors    <- setNames(base_colors[seq_len(n_partners)], partner_levels[seq_len(n_partners)])
-    fill_colors    <- c(fill_colors, "ROW" = "#b0b0b0")
+    
+    base_colors <- c("#1f6f5c", "#8b3a3a", "#4a7c9e", "#e69f00", "#56b4e9", 
+                     "#009e73", "#f0e442", "#0072b2", "#d55e00", "#cc79a7")
+    
+    if (n_partners <= length(base_colors)) {
+      fill_colors <- setNames(base_colors[seq_len(n_partners)], partner_levels[seq_len(n_partners)])
+    } else {
+      expanded_pal <- colorRampPalette(base_colors)(n_partners)
+      fill_colors <- setNames(expanded_pal, partner_levels[seq_len(n_partners)])
+    }
+    fill_colors <- c(fill_colors, "ROW" = "#b0b0b0")
     
     total_dep <- sum(df$n_dep)
     
     role_label   <- if (direction == "import") "import-dependent" else "export-dependent"
     partner_role <- if (direction == "import") "leading exporters" else "leading destinations"
-
+    
     shown_isos   <- setdiff(partner_levels, "ROW")
     legend_pairs <- c(paste0(shown_isos, " = ", iso_name(shown_isos)),
                       "ROW = Rest of the World")
@@ -1246,32 +1286,42 @@ server <- function(input, output, session) {
     
     subtitle_text <- paste0(
       "**Out of ", total_dep, " products for which ", iso_display_name(iso1),
-      " is ", role_label,"<br>", "breakdown by Top 3 ", partner_role, "**",
-      "<br>", legend_text
+      " is ", role_label, "**<br>", "Breakdown by Top ", n_partners, " ", partner_role
     )
     
-    ggplot(df, aes(x = partner_group, y = n_dep, fill = partner_group)) +
-      geom_col(width = 0.6, color = "white", linewidth = 0.4) +
-      geom_text(aes(label = n_dep), vjust = -0.5, size = 4, fontface = "bold", color = "#2b2b2b") +
+    df <- df |>
+      mutate(
+        partner_label = if_else(partner_group == "ROW", "ROW", iso_name(as.character(partner_group))),
+        pct      = 100 * n_dep / total_dep,
+        lab_text = paste0(partner_label, "\n", n_dep, " (", round(pct, 1), "%)")
+      )
+    
+    ggplot(df, aes(area = n_dep, fill = partner_group, label = lab_text)) +
+      geom_treemap(color = "white", size = 1.5) +
+      geom_treemap_text(
+        color = "white", 
+        place = "centre", 
+        grow = FALSE,
+        reflow = TRUE,
+        fontface = "bold", 
+        size = 11, 
+        lineheight = 0.9
+      ) +
       labs(
-        x = NULL, y = "Number of dependent HS6 products",
-        title = paste0(iso_display_name(iso1), " ", role_label,
-                       " products"),
+        title = paste0(iso_display_name(iso1), " ", role_label, " products"),
         subtitle = subtitle_text,
         caption  = "Source : GeoDep IFE-CEPII (2026)"
       ) +
       scale_fill_manual(values = fill_colors, guide = "none") +
-      expand_limits(y = max(df$n_dep) * 1.15) +
       theme_minimal(base_size = 12) +
       theme(
-        plot.title          = element_text(face = "bold", hjust = 0.5, size = 15, color = "#2b2b2b"),
-        plot.subtitle       = ggtext::element_markdown(hjust = 0.5, size = 10, color = "#666666",
-                                                       margin = margin(b = 14), lineheight = 1.3),
-        plot.caption        = element_text(hjust = 1, size = 9, color = "#888888", face = "italic"),
-        panel.grid.major.x  = element_blank(),
-        panel.grid.minor    = element_blank(),
-        panel.grid.major.y  = element_line(color = "#e5e5e5", linewidth = 0.5, linetype = "dashed"),
-        axis.text.x         = element_text(face = "bold", color = "#333333", size = 11)
+        plot.title    = element_text(face = "bold", hjust = 0.5, size = 15, color = "#2b2b2b",
+                                     margin = margin(b = 4)),
+        plot.subtitle = ggtext::element_markdown(hjust = 0.5, size = 10, color = "#666666",
+                                                 margin = margin(b = 14), lineheight = 1.3),
+        plot.caption  = element_text(hjust = 1, size = 9, color = "#888888", face = "italic",
+                                     margin = margin(t = 12)),
+        plot.margin   = margin(10, 10, 10, 10)
       )
   }
   
@@ -1314,7 +1364,7 @@ server <- function(input, output, session) {
         local({
           iso_local <- iso1
           output[[plot_id]] <- renderPlot({
-            p <- tryCatch(make_partner_sector_chart(iso_local, "import"),
+            p <- tryCatch(make_partner_sector_chart(iso_local, "import", input$top_n_slider),
                           error = function(e) NULL)
             req(p)
             p
@@ -1328,7 +1378,7 @@ server <- function(input, output, session) {
                       div(style = "min-height: 68px;",
                           h4(iso_name(iso1))
                       ),
-                      plotOutput(plot_id, height = "320px"),
+                      withSpinner(plotOutput(plot_id, height = "320px"), type = 8, color = "#1f6f5c"),
                       div(style = "text-align: right; margin-top: auto; padding-top: 10px;",
                           downloadButton("download_partner_plot", "Download Graph (PNG)",
                                          style = "background-color: #6c7a76; color: white; border: none;")
@@ -1338,7 +1388,7 @@ server <- function(input, output, session) {
                       div(style = "min-height: 68px;",
                           h4("")
                       ),
-                      plotOutput("sector_chart", height = "320px"),
+                      withSpinner(plotOutput("sector_chart", height = "320px"), type = 8, color = "#1f6f5c"),
                       div(style = "text-align: right; margin-top: auto; padding-top: 10px;",
                           downloadButton("download_plot", "Download Graph (PNG)",
                                          style = "background-color: #6c7a76; color: white; border: none;")
@@ -1350,7 +1400,7 @@ server <- function(input, output, session) {
       } else {
         return(
           div(class = "well",
-              plotOutput("sector_chart", height = "320px"),
+              withSpinner(plotOutput("sector_chart", height = "320px"), type = 8, color = "#1f6f5c"),
               div(style = "text-align: right; margin-top: 10px;",
                   downloadButton("download_plot", "Download Graph (PNG)",
                                  style = "background-color: #6c7a76; color: white; border: none;")
@@ -1367,7 +1417,7 @@ server <- function(input, output, session) {
         local({
           iso_fixed <- iso_local
           output[[plot_id]] <- renderPlot({
-            p <- tryCatch(make_partner_sector_chart(iso_fixed, "export"),
+            p <- tryCatch(make_partner_sector_chart(iso_fixed, "export", input$top_n_slider),
                           error = function(e) NULL)
             req(p)
             p
@@ -1375,7 +1425,7 @@ server <- function(input, output, session) {
         })
         
         div(style = "flex: 1; min-width: 0; display: flex; flex-direction: column;",
-            plotOutput(plot_id, height = "320px"),
+            withSpinner(plotOutput(plot_id, height = "320px"), type = 8, color = "#1f6f5c"),
             if (with_download) {
               div(style = "text-align: right; margin-top: auto; padding-top: 10px;",
                   downloadButton("download_partner_plot", "Download Graph (PNG)",
@@ -1456,7 +1506,7 @@ server <- function(input, output, session) {
       }
       return(result)
     }
-
+    
     iso1 <- selection[1]
     
     if (input$dep_direction == "import") {
