@@ -24,23 +24,25 @@ here::i_am('geodep_shiny.Rproj')
 
 geodep_inputs <- readRDS("1_Data/geodep_shiny_inputs.rds")
 
-DEP_YEAR                  <- geodep_inputs$DEP_YEAR
-eu_countries               <- geodep_inputs$eu_countries
-sector_names               <- geodep_inputs$sector_names
-sector_choices               <- geodep_inputs$sector_choices
-world_polygons                  <- geodep_inputs$world_polygons
-iso_name_lookup                   <- geodep_inputs$iso_name_lookup
-country_choices                     <- geodep_inputs$country_choices
-country_choices_ui                    <- geodep_inputs$country_choices_ui
-dep_import_base                         <- geodep_inputs$dep_import_base
-dep_export_base                           <- geodep_inputs$dep_export_base
-traded_by_country                           <- geodep_inputs$traded_by_country
-traded_by_country_export                      <- geodep_inputs$traded_by_country_export
-imports_sector_long_all                         <- geodep_inputs$imports_sector_long_all
-imports_final <- geodep_inputs$imports_final
-exports_final <- geodep_inputs$exports_final
+DEP_YEAR                 <- geodep_inputs$DEP_YEAR
+eu_countries             <- geodep_inputs$eu_countries
+sector_names             <- geodep_inputs$sector_names
+sector_choices           <- geodep_inputs$sector_choices
+world_polygons           <- geodep_inputs$world_polygons
+iso_name_lookup          <- geodep_inputs$iso_name_lookup
+country_choices          <- geodep_inputs$country_choices
+country_choices_ui       <- geodep_inputs$country_choices_ui
+dep_import_base          <- geodep_inputs$dep_import_base
+dep_export_base          <- geodep_inputs$dep_export_base
+traded_by_country        <- geodep_inputs$traded_by_country
+traded_by_country_export <- geodep_inputs$traded_by_country_export
+imports_sector_long_all  <- geodep_inputs$imports_sector_long_all
+imports_final            <- geodep_inputs$imports_final
+exports_final            <- geodep_inputs$exports_final
 
 rm(geodep_inputs); gc()
+
+MIN_PARTNER_SHARE <- 0.02
 
 sector_choices_ui <- list(
   "All Sectors" = "all",
@@ -55,7 +57,7 @@ sector_choices_ui <- list(
 )
 
 ## -----------------------------------------------------------------------
-## 1. Small helpers 
+## 1. Small helpers
 ## -----------------------------------------------------------------------
 to_eun <- function(iso3) {
   if_else(iso3 %in% eu_countries, "EUN", iso3)
@@ -357,7 +359,7 @@ ui <- fluidPage(
       select#sector_filter optgroup {
         font-weight: 700;
         font-style: normal;
-      color: #1f6f5c;
+        color: #1f6f5c;
       }
 
       select#sector_filter option {
@@ -485,9 +487,9 @@ ui <- fluidPage(
           width: 100%;
           min-height: 0;
           margin-bottom: 20px;
-          position : static;
-          top:auto;
-          max-height none;
+          position: static;
+          top: auto;
+          max-height: none;
         }
         .title-banner {
           grid-template-columns: 1fr;
@@ -510,7 +512,7 @@ ui <- fluidPage(
   
   div(class = "title-banner",
       tags$img(src = "IFE2-Logo-B.png", class = "banner-logo"),
-      h1("GeoDep — Trade Dependencies"),
+      h1("GeoDep \u2014 Trade Dependencies"),
       tags$img(src = "IFE2-Logo-B.png", class = "banner-logo-spacer", `aria-hidden` = "true")
   ),
   
@@ -548,13 +550,6 @@ ui <- fluidPage(
                              options = list(placeholder = "Type a country name..."),
                              width = "100%")
           ),
-          div(class = "sidebar-section",
-              conditionalPanel(
-                condition = "(input.importer_select !== '' && input.exporter_select === '') || (input.importer_select === '' && input.exporter_select !== '')",
-                sliderInput("top_n_slider", "Top Partners in Treemap:", 
-                            min = 3, max = 20, value = 10, step = 1, width = "100%")
-              )
-          ),
           div(class = "sidebar-section sidebar-actions",
               actionButton("reset_button", "Reset selection"),
               actionButton("info_button", "\u2139 Methodology")
@@ -581,7 +576,6 @@ ui <- fluidPage(
               uiOutput("partners_panel"),
               hr(),
               uiOutput("table_heading"),
-              # 2. Add spinner to the datatable
               withSpinner(
                 DTOutput("dependency_table"), 
                 type = 8, color = "#1f6f5c", size = 1
@@ -598,7 +592,6 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   selected_countries <- reactiveVal(character())
   suppress_input_sync <- reactiveVal(0L)  
-  
   
   observeEvent(input$info_button, {
     showModal(modalDialog(
@@ -626,6 +619,8 @@ server <- function(input, output, session) {
       p("On the map, exposure is shown either as the share of traded HS6 products for which the country is dependent (\u201cShare of products\u201d), or as the share of its total trade value concentrated in those dependent products (\u201cShare of trade value\u201d)."),
       p("When an Importer and an Exporter are both selected, the partner panels show their ",
         tags$em("leading"), " dependency partner \u2014 for the Importer, the exporter supplying the largest share of a given dependent product's import value; for the Exporter, the destination absorbing the largest share of a given dependent product's export value."),
+      p("In the treemap, only partners accounting for more than ", round(100 * MIN_PARTNER_SHARE),
+        "% of the country's dependent products are shown individually; all other partners are grouped under \u201cROW\u201d (Rest of the World)."),
       p("Sector groupings (Critical Raw Materials, Dual Use, Health, Agrifood, Energy, Other) come from dedicated reference lists (UNCTAD, EU dual-use regulation, CEPII health nomenclature, FAO, World Bank) and are only available for ", tags$strong("Import"), " dependencies (GeoDep_M); Export dependencies (GeoDep_X) are not sector-tagged."),
       p("Figures reflect 2024 (the only year for which the dependency indicators are available in this dataset) and EU-27 member states are aggregated into a single entity (EUN)."),
       easyClose = TRUE,
@@ -793,12 +788,12 @@ server <- function(input, output, session) {
     iso1 <- selection[1]
     
     if (input$dep_direction == "import") {
-      base       <- dep_import_base |> filter(iso_d == iso1)
+      base        <- dep_import_base |> filter(iso_d == iso1)
       partner_col <- "iso_o"
       total_col   <- "import_dpt"
       value_col   <- "imports"
     } else {
-      base       <- dep_export_base |> filter(iso_o == iso1)
+      base        <- dep_export_base |> filter(iso_o == iso1)
       partner_col <- "iso_d"
       total_col   <- "export_opt"
       value_col   <- "imports"
@@ -955,9 +950,9 @@ server <- function(input, output, session) {
         color       = "white",
         fillOpacity = 0.7,
         highlightOptions = highlightOptions(
-          weight      = 2,
-          color       = "#666",
-          fillOpacity = 0.9,
+          weight       = 2,
+          color        = "#666",
+          fillOpacity  = 0.9,
           bringToFront = TRUE
         ),
         layerId      = ~feature_id,
@@ -1055,8 +1050,8 @@ server <- function(input, output, session) {
       filter(if_any(all_of(sector_cols), ~ .x == 1)) |>
       pull(hs6)
     
-    total_strategic          <- length(unique(strategic_hs6))
-    total_dominant_strategic <- sum(dominant_by_hs6$is_dominant[dominant_by_hs6$hs6 %in% strategic_hs6])
+    total_strategic           <- length(unique(strategic_hs6))
+    total_dominant_strategic  <- sum(dominant_by_hs6$is_dominant[dominant_by_hs6$hs6 %in% strategic_hs6])
     
     out <- dominant_by_hs6 |>
       left_join(sectors_by_hs6, by = "hs6") |>
@@ -1071,10 +1066,10 @@ server <- function(input, output, session) {
       ) |>
       mutate(share_dominant = if_else(n_dep > 0, 100 * n_dominant / n_dep, 0))
     
-    attr(out, "total_dep")               <- total_dep
-    attr(out, "total_dominant")          <- total_dominant
-    attr(out, "total_strategic")         <- total_strategic          
-    attr(out, "total_dominant_strategic") <- total_dominant_strategic 
+    attr(out, "total_dep")                <- total_dep
+    attr(out, "total_dominant")           <- total_dominant
+    attr(out, "total_strategic")          <- total_strategic
+    attr(out, "total_dominant_strategic") <- total_dominant_strategic
     out
   })
   
@@ -1088,14 +1083,14 @@ server <- function(input, output, session) {
     iso1 <- selection[1]
     iso2 <- if (length(selection) >= 2) selection[2] else NA_character_
     direction_label <- "exporter"
-    flow_label       <- "import"
+    flow_label      <- "import"
     
     dominant_label <- if (!is.na(iso2)) paste0("Leading supplier: ", iso_display_name(iso2)) else "Other suppliers"
     
-    total_dep      <- attr(df, "total_dep")
-    total_dominant <- attr(df, "total_dominant")
-    total_strategic          <- attr(df, "total_strategic")            
-    total_dominant_strategic <- attr(df, "total_dominant_strategic")  
+    total_dep                <- attr(df, "total_dep")
+    total_dominant           <- attr(df, "total_dominant")
+    total_strategic          <- attr(df, "total_strategic")
+    total_dominant_strategic <- attr(df, "total_dominant_strategic")
     
     subtitle_text <- if (!is.na(iso2)) {
       paste0(
@@ -1119,9 +1114,9 @@ server <- function(input, output, session) {
     sector_order <- df |> arrange(n_dep) |> pull(Sector_Name)
     df_long <- df_long |> mutate(Sector_Name = factor(Sector_Name, levels = sector_order))
     if (length(selection) >= 2) {
-      title_text <- paste0(iso_name(iso1), " ",flow_label, "-dependent products mainly supplied by ", iso_name(iso2))
+      title_text <- paste0(iso_name(iso1), " ", flow_label, "-dependent products mainly supplied by ", iso_name(iso2))
     } else {
-      title_text <- paste0(iso_display_name(iso1), " ",flow_label, " dependencies by sector")
+      title_text <- paste0(iso_display_name(iso1), " ", flow_label, " dependencies by sector")
     }
     
     title_text <- paste(strwrap(title_text, width = 58), collapse = "\n")
@@ -1140,7 +1135,7 @@ server <- function(input, output, session) {
         title = title_text,
         subtitle = subtitle_text,
         fill = NULL,
-        caption = "Source : GeoDep IFE-CEPII (2026)  •  Note: sectors are not mutually exclusive, a product can belong to more than one sector"
+        caption = "Source : GeoDep IFE-CEPII (2026)  \n Note: sectors are not mutually exclusive, a product can belong to more than one sector"
       ) +
       theme_minimal(base_size = 12) +
       theme(
@@ -1209,7 +1204,7 @@ server <- function(input, output, session) {
       iso1      <- selection[1]
       direction <- input$dep_direction
       
-      p <- tryCatch(make_partner_sector_chart(iso1, direction, input$top_n_slider), error = function(e) NULL)
+      p <- tryCatch(make_partner_sector_chart(iso1, direction), error = function(e) NULL)
       req(p)
       
       ggsave(filename = file, plot = p, device = "png",
@@ -1217,7 +1212,8 @@ server <- function(input, output, session) {
     }
   )
   
-  partner_sector_chart_data <- function(iso1, direction = "import", top_n = 10) {
+  partner_sector_chart_data <- function(iso1, direction = "import",
+                                        min_share = MIN_PARTNER_SHARE) {
     if (direction == "import") {
       base        <- imports_final |> filter(iso_d == iso1)
       partner_col <- "first_odpt"
@@ -1233,43 +1229,50 @@ server <- function(input, output, session) {
     if (nrow(base) == 0) return(NULL)
     
     df0 <- base |> distinct(hs6, partner = .data[[partner_col]])
+    n_total <- nrow(df0)
     
-    topN_partners <- df0 |>
+    partner_counts <- df0 |>
       count(partner, sort = TRUE, name = "n_products") |>
-      slice_head(n = top_n) |>
+      mutate(share = n_products / n_total)
+    
+    main_partners <- partner_counts |>
+      filter(share > min_share) |>
       pull(partner)
-    
-    if (length(topN_partners) == 0) return(NULL)
-    
-    partner_labels <- topN_partners
+
+    if (length(main_partners) == 0) {
+      main_partners <- partner_counts$partner[1]
+    }
     
     df <- df0 |>
-      mutate(partner_group = if_else(partner %in% topN_partners,
-                                     partner, "ROW")) |>
+      mutate(partner_group = if_else(partner %in% main_partners, partner, "ROW")) |>
       count(partner_group, name = "n_dep")
     
     if (nrow(df) == 0) return(NULL)
     
+    lvls <- c(main_partners, if ("ROW" %in% df$partner_group) "ROW")
+    
     df |>
-      mutate(partner_group = factor(partner_group, levels = c(partner_labels, "ROW"))) |>
+      mutate(partner_group = factor(partner_group, levels = lvls)) |>
       arrange(partner_group)
   }
   
-  make_partner_sector_chart <- function(iso1, direction = "import", top_n = 10) {
-    df <- partner_sector_chart_data(iso1, direction, top_n)
+  make_partner_sector_chart <- function(iso1, direction = "import",
+                                        min_share = MIN_PARTNER_SHARE) {
+    df <- partner_sector_chart_data(iso1, direction, min_share)
     if (is.null(df) || nrow(df) == 0) return(NULL)
     
     partner_levels <- levels(df$partner_group)
-    n_partners     <- length(partner_levels) - 1
+    shown_isos     <- setdiff(partner_levels, "ROW")
+    n_partners     <- length(shown_isos)
+    has_row        <- "ROW" %in% partner_levels
     
     base_colors <- c("#1f6f5c", "#8b3a3a", "#4a7c9e", "#e69f00", "#56b4e9", 
                      "#009e73", "#f0e442", "#0072b2", "#d55e00", "#cc79a7")
     
     if (n_partners <= length(base_colors)) {
-      fill_colors <- setNames(base_colors[seq_len(n_partners)], partner_levels[seq_len(n_partners)])
+      fill_colors <- setNames(base_colors[seq_len(n_partners)], shown_isos)
     } else {
-      expanded_pal <- colorRampPalette(base_colors)(n_partners)
-      fill_colors <- setNames(expanded_pal, partner_levels[seq_len(n_partners)])
+      fill_colors <- setNames(colorRampPalette(base_colors)(n_partners), shown_isos)
     }
     fill_colors <- c(fill_colors, "ROW" = "#b0b0b0")
     
@@ -1278,15 +1281,17 @@ server <- function(input, output, session) {
     role_label   <- if (direction == "import") "import-dependent" else "export-dependent"
     partner_role <- if (direction == "import") "leading exporters" else "leading destinations"
     
-    shown_isos   <- setdiff(partner_levels, "ROW")
-    legend_pairs <- c(paste0(shown_isos, " = ", iso_name(shown_isos)),
-                      "ROW = Rest of the World")
-    legend_text  <- paste(legend_pairs, collapse = ", ")
-    legend_text  <- paste(strwrap(legend_text, width = 80), collapse = "<br>")
-    
     subtitle_text <- paste0(
       "**Out of ", total_dep, " products for which ", iso_display_name(iso1),
-      " is ", role_label, "**<br>", "Breakdown by Top ", n_partners, " ", partner_role
+      " is ", role_label, "**<br>",
+      "Breakdown by ", partner_role, " accounting for more than ",
+      round(100 * min_share), "% of these products"
+    )
+    
+    caption_text <- paste0(
+      "Source : GeoDep IFE-CEPII (2026)",
+      if (has_row) paste0("  \n ROW = partners each below ", round(100 * min_share),
+                          "% of dependent products") else ""
     )
     
     df <- df |>
@@ -1310,7 +1315,7 @@ server <- function(input, output, session) {
       labs(
         title = paste0(iso_display_name(iso1), " ", role_label, " products"),
         subtitle = subtitle_text,
-        caption  = "Source : GeoDep IFE-CEPII (2026)"
+        caption  = caption_text
       ) +
       scale_fill_manual(values = fill_colors, guide = "none") +
       theme_minimal(base_size = 12) +
@@ -1364,7 +1369,7 @@ server <- function(input, output, session) {
         local({
           iso_local <- iso1
           output[[plot_id]] <- renderPlot({
-            p <- tryCatch(make_partner_sector_chart(iso_local, "import", input$top_n_slider),
+            p <- tryCatch(make_partner_sector_chart(iso_local, "import"),
                           error = function(e) NULL)
             req(p)
             p
@@ -1417,7 +1422,7 @@ server <- function(input, output, session) {
         local({
           iso_fixed <- iso_local
           output[[plot_id]] <- renderPlot({
-            p <- tryCatch(make_partner_sector_chart(iso_fixed, "export", input$top_n_slider),
+            p <- tryCatch(make_partner_sector_chart(iso_fixed, "export"),
                           error = function(e) NULL)
             req(p)
             p
@@ -1448,7 +1453,6 @@ server <- function(input, output, session) {
       }, error = function(e) {
         div("Unable to display the partner breakdown for this selection.")
       })
-      
       
       div(class = "well", charts)
     }
@@ -1510,17 +1514,17 @@ server <- function(input, output, session) {
     iso1 <- selection[1]
     
     if (input$dep_direction == "import") {
-      base        <- dep_import_base |> filter(iso_d == iso1)
-      total_col   <- "import_dpt"
-      total_label <- "Total Imports (World, k$)"
-      partner_label  <- "First exporter"
-      partner_col <- "first_odpt"
+      base          <- dep_import_base |> filter(iso_d == iso1)
+      total_col     <- "import_dpt"
+      total_label   <- "Total Imports (World, k$)"
+      partner_label <- "First exporter"
+      partner_col   <- "first_odpt"
     } else {
-      base        <- dep_export_base |> filter(iso_o == iso1)
-      total_col   <- "export_opt"
-      total_label <- "Total Exports (World, k$)"
-      partner_label  <- "First destination"
-      partner_col <- "first_dpto"
+      base          <- dep_export_base |> filter(iso_o == iso1)
+      total_col     <- "export_opt"
+      total_label   <- "Total Exports (World, k$)"
+      partner_label <- "First destination"
+      partner_col   <- "first_dpto"
     }
     
     if (input$sector_filter != "all" && input$sector_filter %in% names(base)) {
@@ -1539,7 +1543,7 @@ server <- function(input, output, session) {
       distinct(across(all_of(c("hs6", total_col, partner_label, optional_cols)))) |>
       arrange(desc(.data[[total_col]]))
     
-    colnames(result)[colnames(result) == "hs6"]      <- "HS6 Product"
+    colnames(result)[colnames(result) == "hs6"]     <- "HS6 Product"
     colnames(result)[colnames(result) == total_col] <- total_label
     
     result
@@ -1547,7 +1551,7 @@ server <- function(input, output, session) {
   
   output$dependency_table <- renderDT({
     data <- filtered_dependency_data()
-    sect_cols <- c("sect_crm", "sect_dual_use", "sect_health", "sect_agrifood", "sect_energy", "sect_other")
+    sect_cols   <- c("sect_crm", "sect_dual_use", "sect_health", "sect_agrifood", "sect_energy", "sect_other")
     sect_labels <- c("Critical Raw Materials", "Dual Use", "Health", "Agrifood", "Energy", "Other")
     
     existing_cols <- intersect(sect_cols, names(data))
@@ -1592,7 +1596,7 @@ server <- function(input, output, session) {
     }
     
     empty_msg <- if (length(selected_countries()) == 2) {
-      "No product where the importer is dependent and this exporter is the  supplier (>50%)."
+      "No product where the importer is dependent and this exporter is the supplier (>50%)."
     } else {
       "No dependent products found for this selection."
     }
@@ -1627,6 +1631,7 @@ server <- function(input, output, session) {
     
     dt
   })
+  
   output$download_table <- downloadHandler(
     filename = function() {
       selection <- selected_countries()
