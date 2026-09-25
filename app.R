@@ -1649,6 +1649,43 @@ server <- function(input, output, session) {
     
     dt
   })
+  
+  selection_full_data <- reactive({
+    selection <- selected_countries()
+    req(length(selection) >= 1)
+    
+    direction <- input$dep_direction
+    iso1      <- selection[1]
+    
+    full_data <- if (direction == "import") {
+      imports_final |> select(-sect_strategic, -Description)
+    } else {
+      exports_final |> select(-Description)
+    }
+    
+    if (direction == "import") {
+      result <- full_data |> filter(iso_d == iso1)
+      
+      if (input$sector_filter != "all" && input$sector_filter %in% names(result)) {
+        result <- result |> filter(.data[[input$sector_filter]] == 1)
+      }
+      
+      if (length(selection) == 2) {
+        iso2   <- selection[2]
+        result <- result |> filter(first_odpt == iso2)
+      }
+    } else {
+      result <- full_data |> filter(iso_o == iso1)
+      
+      if (length(selection) == 2) {
+        iso2   <- selection[2]
+        result <- result |> filter(first_dpto == iso2)
+      }
+    }
+    
+    result
+  })
+  
   output$download_table <- downloadHandler(
     filename = function() {
       selection <- selected_countries()
@@ -1687,7 +1724,7 @@ server <- function(input, output, session) {
       csv_name  <- paste0(prefix, "_selection.csv")
       csv_path  <- file.path(tmp_dir, csv_name)
       
-      write_excel_csv2(filtered_dependency_data(), csv_path)
+      write_excel_csv2(selection_full_data(), csv_path) 
       included_ref_files <- copy_reference_files(tmp_dir)
       
       size_kb_unzipped <- format_kb(file.info(csv_path)$size)
