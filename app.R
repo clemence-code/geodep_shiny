@@ -340,6 +340,28 @@ ui <- fluidPage(
         padding-left: 14px;
         padding-right: 14px;
       }
+      
+      #shiny-notification-panel .shiny-notification {
+        background-color: #ffffff;
+        border: 1px solid #cfe0da;
+        border-left: 5px solid #1f6f5c;
+        color: #2b2b2b;
+        border-radius: 4px;
+      }
+      
+      #shiny-notification-panel .progress {
+        background-color: #dce8e4;   
+        height: 10px;
+        border-radius: 3px;
+      }
+      
+      #shiny-notification-panel .progress-bar {
+        background-color: #1f6f5c;   
+      }
+      
+      #shiny-notification-panel .shiny-notification-content-text {
+        color: #2b2b2b;
+      }
 
       .form-group {
         margin-bottom: 20px;
@@ -1718,64 +1740,82 @@ server <- function(input, output, session) {
     },
     contentType = "application/zip",
     content = function(file) {
-      direction <- input$dep_direction
-      prefix    <- if (direction == "import") "GeoDep_M" else "GeoDep_X"
-      
-      full_data <- if (direction == "import") imports_final else exports_final
-      
-      zip_filename <- paste0(prefix, "_full_", Sys.Date(), ".zip")
-      
-      tmp_dir <- tempfile("geodep_full_export_")
-      dir.create(tmp_dir)
-      on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
-      
-      csv_name <- paste0(prefix, "_full.csv")
-      csv_path <- file.path(tmp_dir, csv_name)
-      write_excel_csv2(full_data, csv_path)
-      included_ref_files <- copy_reference_files(tmp_dir)
-      
-      size_kb_unzipped <- format_kb(file.info(csv_path)$size)
-      
-      readme_path <- file.path(tmp_dir, "README.txt")
-      
-      readme_text_draft <- generate_readme(
-        direction        = direction,
-        selection        = character(),
-        sector_filter    = "all",
-        map_metric       = input$map_metric,
-        zip_filename     = zip_filename,
-        size_kb_unzipped = size_kb_unzipped,
-        size_kb_zipped   = NULL,
-        is_full          = TRUE
-      )
-      writeLines(readme_text_draft, readme_path, useBytes = TRUE)
-      
-      tmp_zip_path <- file.path(tmp_dir, "__probe.zip")
-      zip::zip(
-        zipfile = tmp_zip_path,
-        files   = c(basename(csv_path), basename(readme_path), included_ref_files),
-        root    = tmp_dir
-      )
-      size_kb_zipped <- format_kb(file.info(tmp_zip_path)$size)
-      file.remove(tmp_zip_path)
-      
-      readme_text_final <- generate_readme(
-        direction        = direction,
-        selection        = character(),
-        sector_filter    = "all",
-        map_metric       = input$map_metric,
-        zip_filename     = zip_filename,
-        size_kb_unzipped = size_kb_unzipped,
-        size_kb_zipped   = size_kb_zipped,
-        is_full          = TRUE
-      )
-      writeLines(readme_text_final, readme_path, useBytes = TRUE)
-      
-      zip::zip(
-        zipfile = file,
-        files   = c(basename(csv_path), basename(readme_path), included_ref_files),
-        root    = tmp_dir
-      )
+      withProgress(message = "Preparing full dataset", value = 0, {
+        
+        direction <- input$dep_direction
+        prefix    <- if (direction == "import") "GeoDep_M" else "GeoDep_X"
+        
+        incProgress(0.1, detail = "Loading data")
+        
+        imports_final <- imports_final |>
+          select(-sect_strategic,-Description)
+        
+        exports_final <- exports_final |>
+          select(-Description)
+        
+        full_data <- if (direction == "import") imports_final else exports_final
+        
+        zip_filename <- paste0(prefix, "_full_", Sys.Date(), ".zip")
+        
+        tmp_dir <- tempfile("geodep_full_export_")
+        dir.create(tmp_dir)
+        on.exit(unlink(tmp_dir, recursive = TRUE), add = TRUE)
+        
+        csv_name <- paste0(prefix, "_full.csv")
+        csv_path <- file.path(tmp_dir, csv_name)
+        
+        incProgress(0.2, detail = "Writing CSV")
+        write_excel_csv2(full_data, csv_path)
+        included_ref_files <- copy_reference_files(tmp_dir)
+        
+        size_kb_unzipped <- format_kb(file.info(csv_path)$size)
+        
+        incProgress(0.2, detail = "Generating README")
+        readme_path <- file.path(tmp_dir, "README.txt")
+        
+        readme_text_draft <- generate_readme(
+          direction        = direction,
+          selection        = character(),
+          sector_filter    = "all",
+          map_metric       = input$map_metric,
+          zip_filename     = zip_filename,
+          size_kb_unzipped = size_kb_unzipped,
+          size_kb_zipped   = NULL,
+          is_full          = TRUE
+        )
+        writeLines(readme_text_draft, readme_path, useBytes = TRUE)
+        
+        incProgress(0.2, detail = "Compressing (pass 1/2)")
+        tmp_zip_path <- file.path(tmp_dir, "__probe.zip")
+        zip::zip(
+          zipfile = tmp_zip_path,
+          files   = c(basename(csv_path), basename(readme_path), included_ref_files),
+          root    = tmp_dir
+        )
+        size_kb_zipped <- format_kb(file.info(tmp_zip_path)$size)
+        file.remove(tmp_zip_path)
+        
+        readme_text_final <- generate_readme(
+          direction        = direction,
+          selection        = character(),
+          sector_filter    = "all",
+          map_metric       = input$map_metric,
+          zip_filename     = zip_filename,
+          size_kb_unzipped = size_kb_unzipped,
+          size_kb_zipped   = size_kb_zipped,
+          is_full          = TRUE
+        )
+        writeLines(readme_text_final, readme_path, useBytes = TRUE)
+        
+        incProgress(0.2, detail = "Compressing (pass 2/2)")
+        zip::zip(
+          zipfile = file,
+          files   = c(basename(csv_path), basename(readme_path), included_ref_files),
+          root    = tmp_dir
+        )
+        
+        incProgress(0.1, detail = "Done")
+      })
     }
   )
 }
